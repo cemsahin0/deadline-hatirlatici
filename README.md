@@ -18,7 +18,7 @@ ve **30 gün ya da daha az kalanları** masaüstünde sarı bir post-it'te göst
 
 2. **İndir ve kur:**
    ```bash
-   git clone https://github.com/REPO_SAHIBI/deadline-hatirlatici.git ~/Documents/deadline-hatirlatici && bash ~/Documents/deadline-hatirlatici/install.sh
+   git clone https://github.com/cemsahin0/deadline-hatirlatici.git ~/Documents/deadline-hatirlatici && bash ~/Documents/deadline-hatirlatici/install.sh
    ```
    (git sorarsa GitHub'a giriş yap. Alternatif: GitHub sayfasında **Code → Download ZIP**,
    klasörü Belgeler'e taşı, Terminal'de `bash ~/Documents/deadline-hatirlatici-main/install.sh`.)
