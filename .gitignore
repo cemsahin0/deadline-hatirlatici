@@ -1,0 +1,6 @@
+# Kişisel veriler (mail bilgileri, bulunan deadline'lar) asla repoya girmesin
+data/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
