@@ -31,9 +31,25 @@ düzeltip tekrar çalıştırman yeterli.
 İlk tarama mail sayısına göre 1-1,5 saat sürer, çünkü Mail her mailin içeriğini yavaş veriyor.
 Post-it bu sırada kademeli olarak dolar. Sonraki taramalar sadece yeni mailleri okur.
 
-**Güncelleme:** `cd ~/Documents/deadline-hatirlatici && git pull && bash install.sh`
+## Güncelleme
 
-Her bilgisayarın deadline'ları kendi `data/` klasöründe durur ve repoya hiç gönderilmez.
+Kodda bir değişiklik GitHub'a gönderildiğinde, kurulu her bilgisayarda:
+```bash
+cd ~/Documents/deadline-hatirlatici && git pull && bash install.sh
+```
+Kayıtlar (bulunan deadline'lar, tamamlananlar, post-it'in yeri ve boyutu) korunur.
+
+## Arkadaşınla paylaşma
+
+Repo private olduğu için arkadaşın önce eklenmeli:
+1. GitHub'da repo sayfası → **Settings → Collaborators → Add people** → arkadaşının GitHub kullanıcı adı.
+2. Arkadaşın gelen daveti kabul eder.
+3. Yukarıdaki **Kurulum** adımlarını kendi Mac'inde uygular.
+
+Her bilgisayar **kendi** mailini okur ve **kendi** Claude hesabını kullanır; kimsenin
+kullanım hakkı birbirinden gitmez. Herkesin deadline'ları kendi `data/` klasöründe durur,
+repoya hiç gönderilmez (`.gitignore`), yani kimse başkasının maillerini görmez.
+
 
 ## Kullanım
 
