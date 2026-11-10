@@ -19,6 +19,8 @@ from pathlib import Path
 
 import shutil
 
+import sites
+
 # ---- Ayarlar ---------------------------------------------------------------
 LOOKBACK_DAYS = 120        # kaç günlük mailler taransın (~4 ay)
 WINDOW_DAYS = 30           # deadline'ı kaç gün içinde olanlar gösterilsin
@@ -32,6 +34,7 @@ STATE_FILE = DATA / "state.json"
 OUT_FILE = DATA / "deadlines.json"
 LOCK_FILE = DATA / ".lock"
 FETCH_JS = BASE / "fetch_mail.js"
+SITES_FILE = DATA / "sites.txt"   # takip edilen ders siteleri (her satıra bir link)
 
 SCHEMA = {
     "type": "object",
@@ -273,6 +276,7 @@ def write_output(state):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rebuild", action="store_true", help="Mail okumadan sadece listeyi yenile")
+    ap.add_argument("--sites-now", action="store_true", help="Ders sitelerini beklemeden kontrol et")
     args = ap.parse_args()
 
     DATA.mkdir(exist_ok=True)
@@ -312,6 +316,15 @@ def main():
             found_any = True
             for d in found:
                 log(f"  + {d['deadline_date']} {d['title']}")
+
+    try:
+        if sites.check_sites(state, SITES_FILE, extract_deadlines, log, force=args.sites_now):
+            found_any = True
+        save_state(state)
+    except ClaudeNotLoggedIn:
+        raise
+    except Exception as e:
+        log(f"Ders siteleri kontrol edilemedi: {e}")
 
     if found_any or "dropped" not in state:
         log("Tekrarlar ve uzatmalar kontrol ediliyor...")

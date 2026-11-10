@@ -60,12 +60,26 @@ Mac her açıldığında kendiliğinden gelir; kayıtlar `data/` klasöründe sa
 |---|---|
 | **Renkler** | kırmızı ≤ 3 gün · turuncu ≤ 7 gün · yeşil ≤ 30 gün |
 | **✓** | işi bitirdin: listenin en altındaki "Tamamlananlar"a taşır (↺ ile geri al) |
-| **Çift tık** | o deadline'ın geldiği maili Mail'de açar |
+| **Çift tık** | deadline'ın geldiği maili Mail'de (ya da ders sitesini tarayıcıda) açar |
 | **Sürükle** | notu istediğin yere taşı (yeri hatırlanır) |
 | **◢ (sağ alt köşe)** | sürükleyerek boyutunu ayarla (boyut hatırlanır) |
 | **–** | notu tek satıra küçültür ("4 deadline · 1 acil!") |
 | **⟳** | mailleri hemen tarar (normalde açılışta ve her 10 dakikada bir) |
-| **Sağ tık** | menü: şimdi tara, bitti işaretlenenleri geri getir, kapat |
+| **Sağ tık** | menü: şimdi tara, ders sitesi ekle/düzenle, bitti işaretlenenleri geri getir, kapat |
+
+## Ders siteleri
+
+Bazı hocalar duyuruları mail yerine kendi sitesine koyuyor. Post-it'e **sağ tık → Ders sitesi ekle…**
+deyip sayfanın linkini yapıştır; deadline'lar maillerdekiyle aynı şekilde listeye eklenir.
+Listeyi **sağ tık → Ders sitelerini düzenle** ile açıp link silebilirsin (`data/sites.txt`).
+
+Siteye zarar vermemek için:
+- Her site en fazla **6 saatte bir**, tek bir sayfa isteğiyle okunur (günde ~4 istek; linkler takip edilmez).
+- Sayfa değişmediyse sunucu içeriği tekrar göndermez (ETag / Last-Modified), Claude'a da sorulmaz.
+- Site `robots.txt` ile bu tür araçları engelliyorsa okunmaz.
+
+Not: Sadece giriş gerektirmeyen, normal web sayfaları okunabilir (SUCourse gibi şifreli sayfalar
+ve PDF dosyaları okunamaz).
 
 Hocanın sonradan uzattığı/değiştirdiği tarihler otomatik güncellenir: mailler eskiden yeniye
 okunur, en son duyurulan tarih geçerli olur, iptal edilenler listeden düşer. Her taramanın

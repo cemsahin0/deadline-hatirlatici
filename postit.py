@@ -12,6 +12,7 @@ DATA = BASE / "data"
 OUT_FILE = DATA / "deadlines.json"
 DONE_FILE = DATA / "done.json"
 WIN_FILE = DATA / "window.json"
+SITES_FILE = DATA / "sites.txt"
 
 YELLOW = "#FFF59D"
 EDGE = "#D9C64A"      # kağıdın sağ/alt kenarı (gölge hissi)
@@ -132,6 +133,9 @@ class PostIt:
         # Sağ tık menüsü
         self.menu = tk.Menu(root, tearoff=0)
         self.menu.add_command(label="Mailleri şimdi tara", command=self.refresh_mail)
+        self.menu.add_command(label="Ders sitesi ekle…", command=self.add_site)
+        self.menu.add_command(label="Ders sitelerini düzenle", command=self.edit_sites)
+        self.menu.add_separator()
         self.menu.add_command(label="Bitti işaretlenenleri geri getir", command=self.restore_done)
         self.menu.add_separator()
         self.menu.add_command(label="Kapat (bir sonraki açılışta geri gelir)", command=self.on_close)
@@ -274,10 +278,33 @@ class PostIt:
 
 
     # ---- veri -----------------------------------------------------------
-    def refresh_mail(self):
+    def refresh_mail(self, sites_now=False):
         self.footer.config(text="Mailler taranıyor…")
-        subprocess.Popen([sys.executable, str(BASE / "deadline_reminder.py")],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=BASE)
+        cmd = [sys.executable, str(BASE / "deadline_reminder.py")] + (["--sites-now"] if sites_now else [])
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=BASE)
+
+    def add_site(self):
+        """Mac'in kendi diyalog penceresiyle link sor, data/sites.txt'ye ekle, hemen kontrol et."""
+        script = ('text returned of (display dialog "Dersin web sitesinin linkini yapıştır:" '
+                  'default answer "https://" with title "Deadline Hatırlatıcı")')
+        try:
+            out = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=300)
+        except subprocess.TimeoutExpired:
+            return
+        url = out.stdout.strip()
+        if out.returncode != 0 or not url.startswith(("http://", "https://")) or url in ("http://", "https://"):
+            return
+        existing = SITES_FILE.read_text() if SITES_FILE.exists() else ""
+        if url not in existing.split():
+            with open(SITES_FILE, "a") as f:
+                f.write(("" if existing.endswith("\n") or not existing else "\n") + url + "\n")
+        self.footer.config(text="Ders sitesi okunuyor…")
+        self.refresh_mail(sites_now=True)
+
+    def edit_sites(self):
+        if not SITES_FILE.exists():
+            SITES_FILE.write_text("# Takip edilen ders siteleri: her satıra bir link. Silmek için satırı sil.\n")
+        subprocess.Popen(["open", "-e", str(SITES_FILE)])
 
     def mark_done(self, d):
         self.done.add(item_key(d))
@@ -287,6 +314,9 @@ class PostIt:
     def open_mail(self, d):
         mid = d.get("mail_id")
         if not mid:
+            return
+        if str(mid).startswith("site:"):   # web sitesinden gelen deadline: sayfayı tarayıcıda aç
+            subprocess.Popen(["open", str(mid)[5:]])
             return
         script = (f'const M=Application("Mail"); const m=M.inbox.messages.whose({{id:{int(mid)}}});'
                   f' if (m.length) {{ m[0].open(); M.activate(); }}')
@@ -345,7 +375,7 @@ class PostIt:
         self.update_title()
 
         upd = data.get("updated", "")[11:16]
-        self.footer.config(text=f"Son tarama {upd}  ·  çift tık: maili aç  ·  sağ tık: menü")
+        self.footer.config(text=f"Son tarama {upd}  ·  çift tık: kaynağı aç  ·  sağ tık: menü")
         self.fit_list()
 
     def empty(self, text):
