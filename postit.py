@@ -15,6 +15,9 @@ OUT_FILE = DATA / "deadlines.json"
 DONE_FILE = DATA / "done.json"
 WIN_FILE = DATA / "window.json"
 SITES_FILE = DATA / "sites.txt"
+STATE_FILE = DATA / "state.json"
+FILE_TYPES = ('{"com.adobe.pdf", "org.openxmlformats.wordprocessingml.document", "com.microsoft.word.doc", '
+              '"public.rtf", "public.plain-text", "org.oasis-open.opendocument.text"}')
 
 YELLOW = "#FFF59D"
 EDGE = "#D9C64A"      # kağıdın sağ/alt kenarı (gölge hissi)
@@ -26,7 +29,7 @@ RED = "#D84315"
 ORANGE = "#EF8F00"
 GREEN = "#558B2F"
 WIDTH, HEIGHT = 340, 460   # varsayılan boyut (köşeden sürükleyerek değiştirilebilir)
-MIN_W, MIN_H = 260, 170
+MIN_W, MIN_H = 300, 170
 REFRESH_MS = 60_000
 
 TR_MONTHS = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
@@ -101,9 +104,15 @@ class PostIt:
         self.btn_collapse = self.icon_button(header, "–", self.toggle_collapse)
         self.btn_refresh = self.icon_button(header, "⟳", self.refresh_mail)
         self.btn_site = self.icon_button(header, "🔗", self.add_site)
+        self.btn_file = self.icon_button(header, "📎", self.add_file)
+        # Butonlar önce yerleşsin; yer daralırsa başlık kısalsın, butonlar kaybolmasın
+        self.title_lbl.pack_forget()
+        self.title_lbl.config(anchor="w")
+        self.title_lbl.pack(side="left", fill="x", expand=True, padx=12, pady=(0, 2))
         self.hint(self.btn_collapse, "Küçült / büyüt")
         self.hint(self.btn_refresh, "Mailleri şimdi tara")
         self.hint(self.btn_site, "Ders sitesi ekle (hoca duyuruları sitesine koyuyorsa)")
+        self.hint(self.btn_file, "PDF / Word dosyası ekle (syllabus, ödev dosyası…)")
         tk.Frame(self.paper, bg=LINE, height=1).pack(fill="x", padx=12)
 
         # Alt bilgi en alta sabit (pencere küçülünce önce liste küçülsün)
@@ -140,7 +149,8 @@ class PostIt:
         self.menu = tk.Menu(root, tearoff=0)
         self.menu.add_command(label="Mailleri şimdi tara", command=self.refresh_mail)
         self.menu.add_command(label="Ders sitesi ekle…", command=self.add_site)
-        self.menu.add_command(label="Ders sitelerini yönet…", command=self.manage_sites)
+        self.menu.add_command(label="Dosya ekle (PDF, Word)…", command=self.add_file)
+        self.menu.add_command(label="Siteleri ve dosyaları yönet…", command=self.manage_sites)
         self.menu.add_separator()
         self.menu.add_command(label="Bitti işaretlenenleri geri getir", command=self.restore_done)
         self.menu.add_separator()
@@ -342,26 +352,67 @@ class PostIt:
         SITES_FILE.write_text("# Takip edilen ders siteleri: her satıra bir link. Silmek için satırı sil.\n"
                               + "".join(u + "\n" for u in urls))
 
-    def manage_sites(self):
-        """Eklenen siteleri listeler; seçilenleri kaldırır. Metin dosyası düzenlemek gerekmez."""
-        urls = sites.read_site_list(SITES_FILE)
-        if not urls:
-            ok, _ = self.osa('display dialog "Henüz ders sitesi eklemedin." with title "Ders siteleri" '
-                             'buttons {"Kapat", "Site ekle…"} default button "Site ekle…" cancel button "Kapat"')
-            if ok:
-                self.add_site()
+    def run_scanner(self, *args):
+        subprocess.Popen([sys.executable, str(BASE / "deadline_reminder.py"), *args],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=BASE)
+
+    def add_file(self):
+        """Mac'in dosya seçme penceresiyle PDF/Word seç (varsayılan: İndirilenler); sonuç bildirimle gelir."""
+        ok, out = self.osa(
+            'set fs to choose file with prompt "Deadline\'larını bulmak istediğin PDF ya da Word dosyalarını seç '
+            '(birden fazla seçebilirsin):" of type ' + FILE_TYPES +
+            ' default location (path to downloads folder) with multiple selections allowed',
+            'set out to ""',
+            'repeat with f in fs',
+            'set out to out & POSIX path of f & linefeed',
+            'end repeat',
+            'return out')
+        paths = [l for l in out.splitlines() if l.strip()] if ok else []
+        if not paths:
             return
-        ok, out = self.osa('set chosen to choose from list (items 1 thru -1 of argv) with title "Ders siteleri" '
-                           'with prompt "Takip edilen siteler. Kaldırmak istediklerini seç:" '
+        self.footer.config(text="Dosya okunuyor… (sonuç bildirim olarak gelecek)")
+        self.run_scanner("--add-file", *paths)
+
+    def added_files(self):
+        recs = read_json(STATE_FILE, {}).get("processed", {})
+        return [rec.get("path") or k[5:] for k, rec in recs.items() if k.startswith("file:")]
+
+    def manage_sites(self):
+        """Eklenen siteleri ve dosyaları listeler; seçilenleri kaldırır."""
+        urls = sites.read_site_list(SITES_FILE)
+        files = self.added_files()
+        labels = {}
+        for u in urls:
+            labels[f"🌐 {u}"] = ("site", u)
+        for f in files:
+            p = Path(f)
+            labels[f"📄 {p.name}   ({p.parent.name})"] = ("file", f)
+        if not labels:
+            ok, out = self.osa('display dialog "Henüz ders sitesi ya da dosya eklemedin." '
+                               'with title "Siteler ve dosyalar" '
+                               'buttons {"Kapat", "Dosya ekle…", "Site ekle…"} default button "Site ekle…"',
+                               "return button returned of result")
+            if out == "Site ekle…":
+                self.add_site()
+            elif out == "Dosya ekle…":
+                self.add_file()
+            return
+        ok, out = self.osa('set chosen to choose from list (items 1 thru -1 of argv) '
+                           'with title "Siteler ve dosyalar" '
+                           'with prompt "Eklediğin siteler ve dosyalar. Kaldırmak istediklerini seç:" '
                            'OK button name "Seçilenleri kaldır" cancel button name "Kapat" '
                            'with multiple selections allowed',
                            'if chosen is false then return ""',
                            "set AppleScript's text item delimiters to linefeed",
-                           "return chosen as text", args=urls)
-        remove = {l.strip() for l in out.splitlines() if l.strip()} if ok else set()
-        if remove:
-            self.write_sites([u for u in urls if u not in remove])
+                           "return chosen as text", args=list(labels))
+        chosen = [labels[l] for l in out.splitlines() if l in labels] if ok else []
+        rm_sites = {v for k, v in chosen if k == "site"}
+        rm_files = [v for k, v in chosen if k == "file"]
+        if rm_sites:
+            self.write_sites([u for u in urls if u not in rm_sites])
             self.refresh_mail()  # kaldırılan sitenin deadline'ları listeden düşsün
+        if rm_files:
+            self.run_scanner("--remove-file", *rm_files)
 
     def mark_done(self, d):
         self.done.add(item_key(d))
@@ -372,7 +423,7 @@ class PostIt:
         mid = d.get("mail_id")
         if not mid:
             return
-        if str(mid).startswith("site:"):   # web sitesinden gelen deadline: sayfayı tarayıcıda aç
+        if str(mid).startswith(("site:", "file:")):   # site → tarayıcıda, dosya → kendi uygulamasında aç
             subprocess.Popen(["open", str(mid)[5:]])
             return
         script = (f'const M=Application("Mail"); const m=M.inbox.messages.whose({{id:{int(mid)}}});'

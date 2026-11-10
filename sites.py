@@ -11,6 +11,10 @@ import datetime as dt
 import hashlib
 import socket
 import subprocess
+import tempfile
+from pathlib import Path
+
+import docs
 import html.parser
 import ssl
 import urllib.error
@@ -28,6 +32,8 @@ except ImportError:
     SSL_CTX = ssl.create_default_context()
 TIMEOUT = 20
 MAX_BYTES = 3_000_000
+MAX_DOC_BYTES = 25_000_000   # PDF/Word linkleri için
+DOC_TYPES = {"pdf": ".pdf", "msword": ".doc", "wordprocessingml": ".docx", "rtf": ".rtf"}
 MAX_CHARS = 40_000
 
 PAGE_NOTE = ("(Bu bir mail DEĞİL: dersin web sayfasının şu anki içeriği. Sadece öğrencinin yapması "
@@ -105,7 +111,8 @@ def robots_allows(url):
 
 
 def fetch(url, meta):
-    """(durum, title, metin, yeni_meta). durum: 'changed' | 'same' | 'login' | 'unsupported'."""
+    """(durum, title, metin, yeni_meta). durum: 'changed' | 'same' | 'login' | 'unsupported' | 'empty'.
+    Web sayfalarının yanında PDF / Word linklerini de okur."""
     headers = {"User-Agent": UA, "Accept": "text/html,text/plain;q=0.9,*/*;q=0.1"}
     if meta.get("etag"):
         headers["If-None-Match"] = meta["etag"]
@@ -114,10 +121,15 @@ def fetch(url, meta):
     req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT, context=SSL_CTX) as r:
-            ctype = r.headers.get("Content-Type", "")
-            if not any(t in ctype for t in ("html", "text/plain", "xml")) and ctype:
+            ctype = r.headers.get("Content-Type", "").lower()
+            path_ext = Path(urllib.parse.urlsplit(url).path).suffix.lower()
+            doc_ext = next((e for t, e in DOC_TYPES.items() if t in ctype), None)
+            if doc_ext is None and path_ext in docs.SUPPORTED_EXT - {".html", ".htm", ".txt", ".md"} \
+                    and "html" not in ctype:
+                doc_ext = path_ext
+            if doc_ext is None and ctype and not any(t in ctype for t in ("html", "text/plain", "xml")):
                 return "unsupported", "", ctype, meta
-            raw = r.read(MAX_BYTES)
+            raw = r.read(MAX_DOC_BYTES if doc_ext else MAX_BYTES)
             charset = r.headers.get_content_charset() or "utf-8"
             new_meta = {**meta, "etag": r.headers.get("ETag", ""),
                         "last_modified": r.headers.get("Last-Modified", "")}
@@ -125,6 +137,18 @@ def fetch(url, meta):
         if e.code == 304:
             return "same", "", "", meta
         raise
+    if doc_ext:  # PDF / Word linki: geçici dosyaya yazıp metnini çıkar
+        with tempfile.NamedTemporaryFile(suffix=doc_ext) as tmp:
+            tmp.write(raw)
+            tmp.flush()
+            try:
+                text = docs.file_text(tmp.name)
+            except docs.Unreadable as e:
+                return "empty", "", str(e), meta
+        title = Path(urllib.parse.unquote(urllib.parse.urlsplit(url).path)).name
+        digest = hashlib.sha256(text.encode()).hexdigest()
+        new_meta["hash"] = digest
+        return ("same" if digest == meta.get("hash") else "changed"), title, text, new_meta
     text_raw = raw.decode(charset, "replace")
     low = text_raw.lower()
     if 'type="password"' in low or "type='password'" in low or "type=password" in low:
@@ -147,6 +171,22 @@ def notify(title, message):
                         "-e", "end run", title, message], timeout=10, capture_output=True)
     except Exception:
         pass
+
+
+def result_message(found, window_days=30):
+    """Bulunan deadline'lara göre kullanıcıya gösterilecek sade sonuç cümlesi."""
+    today = dt.date.today()
+    active = [d for d in found if d.get("status") != "cancelled"]
+    upcoming = [d for d in active if d["deadline_date"] >= today.isoformat()]
+    if not active:
+        return "Burada bir deadline / yaklaşan tarih bulunamadı."
+    if not upcoming:
+        return "Buradaki tarihlerin hepsi geçmiş; yaklaşan bir tarih yok."
+    soon = [d for d in upcoming if d["deadline_date"] <= (today + dt.timedelta(days=window_days)).isoformat()]
+    msg = f"✓ {len(upcoming)} yaklaşan tarih bulundu"
+    if len(soon) < len(upcoming):
+        msg += f" ({len(upcoming) - len(soon)} tanesi {window_days} günden uzak, zamanı gelince görünecek)"
+    return msg + "."
 
 
 def friendly_error(e):
@@ -207,10 +247,11 @@ def check_sites(state, sites_file, extract, log, force=False):
             metas[url] = {**meta, "checked": now.isoformat(timespec="seconds")}
             continue
         new_meta["checked"] = now.isoformat(timespec="seconds")
-        if status in ("unsupported", "login"):
-            msg = ("Bu sayfa giriş (şifre) istiyor; sadece herkese açık sayfalar okunabilir."
-                   if status == "login" else
-                   "Bu link bir web sayfası değil (PDF ya da dosya). Dersin ana sayfasının linkini ekle.")
+        if status in ("unsupported", "login", "empty"):
+            msg = {"login": "Bu sayfa giriş (şifre) istiyor; sadece herkese açık sayfalar okunabilir.",
+                   "empty": text,
+                   "unsupported": "Bu link okunabilen bir sayfa ya da belge değil (web sayfası, PDF "
+                                  "veya Word olmalı)."}[status]
             log(f"Site atlandı ({host}): {msg}")
             say(msg)
             metas[url] = new_meta
@@ -219,9 +260,11 @@ def check_sites(state, sites_file, extract, log, force=False):
             metas[url] = new_meta
             continue
         log(f"Ders sitesi okunuyor: {title or host}")
+        is_doc = Path(urllib.parse.urlsplit(url).path).suffix.lower() in docs.SUPPORTED_EXT - {".html", ".htm"}
         page = {"id": f"site:{url}", "sender": host,
                 "date": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-                "subject": title or url, "content": PAGE_NOTE + text[:MAX_CHARS]}
+                "subject": title or url,
+                "content": (docs.DOC_NOTE if is_doc else PAGE_NOTE) + text[:MAX_CHARS]}
         found = extract([page], state)
         state["processed"][page["id"]] = {
             "subject": page["subject"], "sender": host, "date": page["date"], "url": url,
@@ -232,11 +275,5 @@ def check_sites(state, sites_file, extract, log, force=False):
         changed_any = True
         for d in found:
             log(f"  + {d['deadline_date']} {d['title']}  (site)")
-        today = dt.date.today().isoformat()
-        upcoming = [d for d in found if d["deadline_date"] >= today and d.get("status") != "cancelled"]
-        if upcoming:
-            say(f"Eklendi ✓ {len(upcoming)} yaklaşan tarih bulundu, post-it'e eklendi. "
-                "Site birkaç saatte bir kontrol edilecek.")
-        else:
-            say("Eklendi ✓ Şu an yaklaşan bir tarih yok; sayfa değişirse otomatik görünecek.")
+        say("Eklendi. " + result_message(found) + " Site birkaç saatte bir kontrol edilecek.")
     return changed_any

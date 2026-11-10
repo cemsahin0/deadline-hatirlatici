@@ -19,6 +19,7 @@ from pathlib import Path
 
 import shutil
 
+import docs
 import sites
 
 # ---- Ayarlar ---------------------------------------------------------------
@@ -273,21 +274,77 @@ def write_output(state):
     return items
 
 
+def now_iso():
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def import_files(paths, state):
+    """Kullanıcının seçtiği PDF/Word dosyalarını oku, deadline'larını ekle, sonucu bildirimle söyle."""
+    found_any = False
+    for path in paths:
+        p = Path(path).expanduser().resolve()
+        name = p.name
+        try:
+            text = docs.file_text(p)
+        except docs.Unreadable as e:
+            log(f"Dosya okunamadı ({name}): {e}")
+            sites.notify(f"Dosya: {name}", str(e))
+            continue
+        except Exception as e:
+            log(f"Dosya okunamadı ({name}): {e}")
+            sites.notify(f"Dosya: {name}", "Dosya okunamadı. macOS izin sorduysa İzin Ver deyip tekrar dene.")
+            continue
+        log(f"Dosya okunuyor: {name}")
+        key = f"file:{p}"
+        page = {"id": key, "sender": "Dosya", "date": now_iso(), "subject": name,
+                "content": docs.DOC_NOTE + text[:sites.MAX_CHARS]}
+        found = extract_deadlines([page], state)
+        state["processed"][key] = {
+            "subject": name, "sender": "Dosya", "date": page["date"], "path": str(p),
+            "deadlines": [{k: d[k] for k in ("title", "deadline_date", "deadline_time", "source", "status")}
+                          for d in found],
+        }
+        save_state(state)
+        for d in found:
+            log(f"  + {d['deadline_date']} {d['title']}  (dosya)")
+        sites.notify(f"Dosya: {name}", sites.result_message(found, WINDOW_DAYS))
+        found_any = found_any or bool(found)
+    return found_any
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rebuild", action="store_true", help="Mail okumadan sadece listeyi yenile")
     ap.add_argument("--sites-now", action="store_true", help="Ders sitelerini beklemeden kontrol et")
+    ap.add_argument("--add-file", nargs="+", metavar="DOSYA", help="PDF/Word dosyalarını oku ve ekle")
+    ap.add_argument("--remove-file", nargs="+", metavar="DOSYA", help="Eklenen dosyaları listeden çıkar")
     args = ap.parse_args()
 
     DATA.mkdir(exist_ok=True)
     lock = open(LOCK_FILE, "w")
-    try:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        log("Başka bir tarama zaten çalışıyor, çıkılıyor.")
-        return
+    if args.add_file or args.remove_file:
+        fcntl.flock(lock, fcntl.LOCK_EX)   # kullanıcı istedi: süren tarama bitene kadar bekle
+    else:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            log("Başka bir tarama zaten çalışıyor, çıkılıyor.")
+            return
 
     state = load_state()
+    if args.add_file:
+        if import_files(args.add_file, state):
+            merge_duplicates(state)
+            save_state(state)
+        write_output(state)
+        return
+    if args.remove_file:
+        for f in args.remove_file:
+            state["processed"].pop(f"file:{Path(f).expanduser().resolve()}", None)
+        save_state(state)
+        write_output(state)
+        log(f"{len(args.remove_file)} dosya listeden çıkarıldı.")
+        return
     if args.rebuild:
         log(f"{len(write_output(state))} deadline yazıldı.")
         return

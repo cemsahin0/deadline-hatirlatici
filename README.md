@@ -60,13 +60,29 @@ Mac her açıldığında kendiliğinden gelir; kayıtlar `data/` klasöründe sa
 |---|---|
 | **Renkler** | kırmızı ≤ 3 gün · turuncu ≤ 7 gün · yeşil ≤ 30 gün |
 | **✓** | işi bitirdin: listenin en altındaki "Tamamlananlar"a taşır (↺ ile geri al) |
-| **Çift tık** | deadline'ın geldiği maili Mail'de (ya da ders sitesini tarayıcıda) açar |
+| **Çift tık** | deadline'ın kaynağını açar (mail, ders sitesi ya da dosya) |
 | **Sürükle** | notu istediğin yere taşı (yeri hatırlanır) |
 | **◢ (sağ alt köşe)** | sürükleyerek boyutunu ayarla (boyut hatırlanır) |
 | **–** | notu tek satıra küçültür ("4 deadline · 1 acil!") |
 | **🔗** | ders sitesi ekle (bkz. Ders siteleri) |
+| **📎** | PDF / Word dosyası ekle (bkz. PDF ve Word dosyaları) |
 | **⟳** | mailleri hemen tarar (normalde açılışta ve her 10 dakikada bir) |
-| **Sağ tık** | menü: şimdi tara, ders sitesi ekle/yönet, bitti işaretlenenleri geri getir, kapat |
+| **Sağ tık** | menü: şimdi tara, site/dosya ekle, siteleri ve dosyaları yönet, bitti işaretlenenleri geri getir, kapat |
+
+## PDF ve Word dosyaları
+
+Syllabus, ödev açıklaması gibi bir dosyadaki tarihleri de ekleyebilirsin:
+
+1. Post-it'in üstündeki **📎** butonuna bas.
+2. Açılan pencerede dosyayı seç (İndirilenler'den açılır; soldan Masaüstü vb. de seçebilirsin,
+   **Cmd** basılı tutarak birden fazla dosya seçebilirsin) → **Aç**.
+3. Birkaç saniye içinde bildirim gelir: kaç yaklaşan tarih bulunduğunu, dosyada tarih yoksa
+   "Burada bir deadline / yaklaşan tarih bulunamadı", tarihler geçmişse "hepsi geçmiş" der.
+
+Okunabilenler: **PDF, Word (.docx, .doc), .rtf, .odt, .txt**. Taranmış (fotoğraf) PDF'lerde yazı
+olmadığı için okunamaz; bildirim bunu söyler. İlk seferde macOS "İndirilenler klasörüne erişim"
+izni sorarsa **İzin Ver** de. Dosyadan gelen bir deadline'a çift tıklarsan dosya açılır.
+Ders sitesinde bir PDF linki varsa onu da 🔗 ile site gibi ekleyebilirsin.
 
 ## Ders siteleri
 
@@ -78,7 +94,7 @@ Bazı hocalar duyuruları mail yerine kendi web sitesine koyuyor. Onları da ekl
 
 Birkaç saniye içinde sağ üstte bir bildirim gelir: kaç tarih bulunduğunu ya da neden
 okunamadığını (link yanlış, sayfa şifreli vb.) ve ne yapman gerektiğini söyler.
-Siteyi çıkarmak için: post-it'e **sağ tık → Ders sitelerini yönet…** → siteyi seç → **Seçilenleri kaldır**.
+Siteyi çıkarmak için: post-it'e **sağ tık → Siteleri ve dosyaları yönet…** → siteyi seç → **Seçilenleri kaldır**.
 
 Eklediğin siteler sadece senin bilgisayarında durur (`data/sites.txt`), GitHub'a gönderilmez.
 
@@ -88,7 +104,7 @@ Siteye zarar vermemek için:
 - Site `robots.txt` ile bu tür araçları engelliyorsa okunmaz.
 
 Not: Sadece şifresiz açılan normal web sayfaları okunabilir (SUCourse gibi giriş gerektiren
-sayfalar ve PDF dosyaları okunamaz).
+sayfalar okunamaz). Sitedeki PDF / Word linkleri de eklenebilir.
 
 Hocanın sonradan uzattığı/değiştirdiği tarihler otomatik güncellenir: mailler eskiden yeniye
 okunur, en son duyurulan tarih geçerli olur, iptal edilenler listeden düşer. Her taramanın
