@@ -64,22 +64,31 @@ Mac her açıldığında kendiliğinden gelir; kayıtlar `data/` klasöründe sa
 | **Sürükle** | notu istediğin yere taşı (yeri hatırlanır) |
 | **◢ (sağ alt köşe)** | sürükleyerek boyutunu ayarla (boyut hatırlanır) |
 | **–** | notu tek satıra küçültür ("4 deadline · 1 acil!") |
+| **🔗** | ders sitesi ekle (bkz. Ders siteleri) |
 | **⟳** | mailleri hemen tarar (normalde açılışta ve her 10 dakikada bir) |
-| **Sağ tık** | menü: şimdi tara, ders sitesi ekle/düzenle, bitti işaretlenenleri geri getir, kapat |
+| **Sağ tık** | menü: şimdi tara, ders sitesi ekle/yönet, bitti işaretlenenleri geri getir, kapat |
 
 ## Ders siteleri
 
-Bazı hocalar duyuruları mail yerine kendi sitesine koyuyor. Post-it'e **sağ tık → Ders sitesi ekle…**
-deyip sayfanın linkini yapıştır; deadline'lar maillerdekiyle aynı şekilde listeye eklenir.
-Listeyi **sağ tık → Ders sitelerini düzenle** ile açıp link silebilirsin (`data/sites.txt`).
+Bazı hocalar duyuruları mail yerine kendi web sitesine koyuyor. Onları da eklemek çok kolay:
+
+1. Tarayıcıda dersin sayfasını aç, üstteki adres çubuğuna tıkla ve **Cmd+C** ile kopyala.
+2. Post-it'in üstündeki **🔗** butonuna bas.
+3. Açılan pencereye **Cmd+V** ile yapıştır ve **Ekle** de.
+
+Birkaç saniye içinde sağ üstte bir bildirim gelir: kaç tarih bulunduğunu ya da neden
+okunamadığını (link yanlış, sayfa şifreli vb.) ve ne yapman gerektiğini söyler.
+Siteyi çıkarmak için: post-it'e **sağ tık → Ders sitelerini yönet…** → siteyi seç → **Seçilenleri kaldır**.
+
+Eklediğin siteler sadece senin bilgisayarında durur (`data/sites.txt`), GitHub'a gönderilmez.
 
 Siteye zarar vermemek için:
 - Her site en fazla **6 saatte bir**, tek bir sayfa isteğiyle okunur (günde ~4 istek; linkler takip edilmez).
 - Sayfa değişmediyse sunucu içeriği tekrar göndermez (ETag / Last-Modified), Claude'a da sorulmaz.
 - Site `robots.txt` ile bu tür araçları engelliyorsa okunmaz.
 
-Not: Sadece giriş gerektirmeyen, normal web sayfaları okunabilir (SUCourse gibi şifreli sayfalar
-ve PDF dosyaları okunamaz).
+Not: Sadece şifresiz açılan normal web sayfaları okunabilir (SUCourse gibi giriş gerektiren
+sayfalar ve PDF dosyaları okunamaz).
 
 Hocanın sonradan uzattığı/değiştirdiği tarihler otomatik güncellenir: mailler eskiden yeniye
 okunur, en son duyurulan tarih geçerli olur, iptal edilenler listeden düşer. Her taramanın

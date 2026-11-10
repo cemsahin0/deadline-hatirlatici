@@ -7,6 +7,8 @@ import sys
 import tkinter as tk
 from pathlib import Path
 
+import sites
+
 BASE = Path(__file__).resolve().parent
 DATA = BASE / "data"
 OUT_FILE = DATA / "deadlines.json"
@@ -98,6 +100,10 @@ class PostIt:
         self.title_lbl.pack(side="left", padx=12, pady=(0, 2))
         self.btn_collapse = self.icon_button(header, "–", self.toggle_collapse)
         self.btn_refresh = self.icon_button(header, "⟳", self.refresh_mail)
+        self.btn_site = self.icon_button(header, "🔗", self.add_site)
+        self.hint(self.btn_collapse, "Küçült / büyüt")
+        self.hint(self.btn_refresh, "Mailleri şimdi tara")
+        self.hint(self.btn_site, "Ders sitesi ekle (hoca duyuruları sitesine koyuyorsa)")
         tk.Frame(self.paper, bg=LINE, height=1).pack(fill="x", padx=12)
 
         # Alt bilgi en alta sabit (pencere küçülünce önce liste küçülsün)
@@ -134,7 +140,7 @@ class PostIt:
         self.menu = tk.Menu(root, tearoff=0)
         self.menu.add_command(label="Mailleri şimdi tara", command=self.refresh_mail)
         self.menu.add_command(label="Ders sitesi ekle…", command=self.add_site)
-        self.menu.add_command(label="Ders sitelerini düzenle", command=self.edit_sites)
+        self.menu.add_command(label="Ders sitelerini yönet…", command=self.manage_sites)
         self.menu.add_separator()
         self.menu.add_command(label="Bitti işaretlenenleri geri getir", command=self.restore_done)
         self.menu.add_separator()
@@ -283,28 +289,79 @@ class PostIt:
         cmd = [sys.executable, str(BASE / "deadline_reminder.py")] + (["--sites-now"] if sites_now else [])
         subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=BASE)
 
-    def add_site(self):
-        """Mac'in kendi diyalog penceresiyle link sor, data/sites.txt'ye ekle, hemen kontrol et."""
-        script = ('text returned of (display dialog "Dersin web sitesinin linkini yapıştır:" '
-                  'default answer "https://" with title "Deadline Hatırlatıcı")')
+    def hint(self, widget, text):
+        """Butonun üstüne gelince ne işe yaradığını alt satırda göster."""
+        widget.bind("<Enter>", lambda e: (setattr(self, "_footer_saved", self.footer.cget("text")),
+                                          self.footer.config(text=text)), add="+")
+        widget.bind("<Leave>", lambda e: self.footer.config(text=getattr(self, "_footer_saved", "")),
+                    add="+")
+
+    @staticmethod
+    def osa(*lines, args=()):
+        """AppleScript çalıştır (Mac'in kendi diyalogları için). (başarılı mı, çıktı) döner."""
+        cmd = ["osascript"]
+        for l in ("on run argv",) + lines + ("end run",):
+            cmd += ["-e", l]
         try:
-            out = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=300)
+            out = subprocess.run(cmd + list(args), capture_output=True, text=True, timeout=600)
         except subprocess.TimeoutExpired:
+            return False, ""
+        return out.returncode == 0, out.stdout.strip()
+
+    def add_site(self):
+        """Mac'in kendi penceresiyle link sor, listeye ekle, hemen kontrol et (sonuç bildirimle gelir)."""
+        msg = ("Hocan duyuruları ve tarihleri kendi web sitesine koyuyorsa buraya ekle.\n\n"
+               "1) Tarayıcıda dersin sayfasını aç\n"
+               "2) Üstteki adres çubuğuna tıkla, Cmd+C ile kopyala\n"
+               "3) Aşağıya Cmd+V ile yapıştır\n\n"
+               "Not: Şifreyle girilen sayfalar (SUCourse gibi) okunamaz.")
+        while True:
+            ok, url = self.osa('display dialog (item 1 of argv) default answer "" '
+                               'with title "Ders sitesi ekle" buttons {"Vazgeç", "Ekle"} '
+                               'default button "Ekle" cancel button "Vazgeç"',
+                               "return text returned of result", args=[msg])
+            if not ok:
+                return
+            url = url.strip().strip("<>\"' ")
+            if url and "://" not in url:
+                url = "https://" + url
+            host = url.split("://", 1)[-1].split("/")[0]
+            if url.startswith(("http://", "https://")) and "." in host and " " not in url:
+                break
+            self.osa('display alert "Bu bir web sitesi linki gibi görünmüyor." message '
+                     '"Linkin böyle görünmesi lazım:  https://ders.ornek.edu/  — tekrar dene." as warning')
+        urls = sites.read_site_list(SITES_FILE)
+        if url in urls:
+            self.osa('display notification "Bu site zaten listede." with title "Deadline Hatırlatıcı"')
             return
-        url = out.stdout.strip()
-        if out.returncode != 0 or not url.startswith(("http://", "https://")) or url in ("http://", "https://"):
-            return
-        existing = SITES_FILE.read_text() if SITES_FILE.exists() else ""
-        if url not in existing.split():
-            with open(SITES_FILE, "a") as f:
-                f.write(("" if existing.endswith("\n") or not existing else "\n") + url + "\n")
-        self.footer.config(text="Ders sitesi okunuyor…")
+        self.write_sites(urls + [url])
+        self.footer.config(text="Ders sitesi okunuyor… (sonuç bildirim olarak gelecek)")
         self.refresh_mail(sites_now=True)
 
-    def edit_sites(self):
-        if not SITES_FILE.exists():
-            SITES_FILE.write_text("# Takip edilen ders siteleri: her satıra bir link. Silmek için satırı sil.\n")
-        subprocess.Popen(["open", "-e", str(SITES_FILE)])
+    def write_sites(self, urls):
+        SITES_FILE.write_text("# Takip edilen ders siteleri: her satıra bir link. Silmek için satırı sil.\n"
+                              + "".join(u + "\n" for u in urls))
+
+    def manage_sites(self):
+        """Eklenen siteleri listeler; seçilenleri kaldırır. Metin dosyası düzenlemek gerekmez."""
+        urls = sites.read_site_list(SITES_FILE)
+        if not urls:
+            ok, _ = self.osa('display dialog "Henüz ders sitesi eklemedin." with title "Ders siteleri" '
+                             'buttons {"Kapat", "Site ekle…"} default button "Site ekle…" cancel button "Kapat"')
+            if ok:
+                self.add_site()
+            return
+        ok, out = self.osa('set chosen to choose from list (items 1 thru -1 of argv) with title "Ders siteleri" '
+                           'with prompt "Takip edilen siteler. Kaldırmak istediklerini seç:" '
+                           'OK button name "Seçilenleri kaldır" cancel button name "Kapat" '
+                           'with multiple selections allowed',
+                           'if chosen is false then return ""',
+                           "set AppleScript's text item delimiters to linefeed",
+                           "return chosen as text", args=urls)
+        remove = {l.strip() for l in out.splitlines() if l.strip()} if ok else set()
+        if remove:
+            self.write_sites([u for u in urls if u not in remove])
+            self.refresh_mail()  # kaldırılan sitenin deadline'ları listeden düşsün
 
     def mark_done(self, d):
         self.done.add(item_key(d))

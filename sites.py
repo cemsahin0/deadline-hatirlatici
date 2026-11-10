@@ -9,6 +9,8 @@ Site listesi: data/sites.txt (her satıra bir link, # ile başlayan satırlar yo
 """
 import datetime as dt
 import hashlib
+import socket
+import subprocess
 import html.parser
 import ssl
 import urllib.error
@@ -103,7 +105,7 @@ def robots_allows(url):
 
 
 def fetch(url, meta):
-    """(durum, title, metin, yeni_meta). durum: 'changed' | 'same' | 'blocked' | 'unsupported'."""
+    """(durum, title, metin, yeni_meta). durum: 'changed' | 'same' | 'login' | 'unsupported'."""
     headers = {"User-Agent": UA, "Accept": "text/html,text/plain;q=0.9,*/*;q=0.1"}
     if meta.get("etag"):
         headers["If-None-Match"] = meta["etag"]
@@ -124,6 +126,9 @@ def fetch(url, meta):
             return "same", "", "", meta
         raise
     text_raw = raw.decode(charset, "replace")
+    low = text_raw.lower()
+    if 'type="password"' in low or "type='password'" in low or "type=password" in low:
+        return "login", "", "", meta
     if "html" in ctype or "<html" in text_raw[:2000].lower():
         title, text = html_to_text(text_raw)
     else:
@@ -132,6 +137,32 @@ def fetch(url, meta):
     status = "same" if digest == meta.get("hash") else "changed"
     new_meta["hash"] = digest
     return status, title, text, new_meta
+
+
+def notify(title, message):
+    """macOS bildirimi göster (site eklendikten sonra sonucu kullanıcıya söylemek için)."""
+    try:
+        subprocess.run(["osascript", "-e", "on run argv", "-e",
+                        "display notification (item 2 of argv) with title (item 1 of argv)",
+                        "-e", "end run", title, message], timeout=10, capture_output=True)
+    except Exception:
+        pass
+
+
+def friendly_error(e):
+    """Hata mesajını teknik olmayan, ne yapılacağını söyleyen bir cümleye çevir."""
+    if isinstance(e, urllib.error.HTTPError):
+        if e.code in (401, 403):
+            return "Site giriş istiyor ya da erişime kapalı. Sadece herkese açık sayfalar okunabilir."
+        if e.code == 404:
+            return "Sayfa bulunamadı. Linki tarayıcıda açıp adres çubuğundan tekrar kopyala."
+        return f"Site hata verdi (kod {e.code}). Daha sonra tekrar denenecek."
+    reason = getattr(e, "reason", e)
+    if isinstance(reason, socket.gaierror):
+        return "Siteye ulaşılamadı: link yanlış olabilir ya da internet yok."
+    if isinstance(reason, (TimeoutError, socket.timeout)) or isinstance(e, (TimeoutError, socket.timeout)):
+        return "Site yanıt vermedi. Daha sonra tekrar denenecek."
+    return f"Site okunamadı ({reason}). Daha sonra tekrar denenecek."
 
 
 def due(meta, now):
@@ -159,19 +190,29 @@ def check_sites(state, sites_file, extract, log, force=False):
         if not force and not due(meta, now):
             continue
         host = urllib.parse.urlsplit(url).netloc
+        first = not meta.get("checked")   # yeni eklendi: sonucu bildirimle söyle
+        say = (lambda msg: notify(f"Ders sitesi: {host}", msg)) if first else (lambda msg: None)
         try:
-            if not meta.get("checked") and not robots_allows(url):
+            if first and not robots_allows(url):
                 log(f"Site atlandı (robots.txt izin vermiyor): {url}")
+                say("Bu site otomatik okunmak istemiyor (robots.txt). Deadline'ları buradan alınamaz.")
                 metas[url] = {**meta, "checked": now.isoformat(timespec="seconds"), "blocked": True}
+                continue
+            if meta.get("blocked"):
                 continue
             status, title, text, new_meta = fetch(url, meta)
         except Exception as e:
             log(f"Site okunamadı ({host}): {e}")
+            say(friendly_error(e))
             metas[url] = {**meta, "checked": now.isoformat(timespec="seconds")}
             continue
         new_meta["checked"] = now.isoformat(timespec="seconds")
-        if status == "unsupported":
-            log(f"Site atlandı ({host}): desteklenmeyen içerik türü {text}")
+        if status in ("unsupported", "login"):
+            msg = ("Bu sayfa giriş (şifre) istiyor; sadece herkese açık sayfalar okunabilir."
+                   if status == "login" else
+                   "Bu link bir web sayfası değil (PDF ya da dosya). Dersin ana sayfasının linkini ekle.")
+            log(f"Site atlandı ({host}): {msg}")
+            say(msg)
             metas[url] = new_meta
             continue
         if status == "same" and f"site:{url}" in state["processed"]:
@@ -191,4 +232,11 @@ def check_sites(state, sites_file, extract, log, force=False):
         changed_any = True
         for d in found:
             log(f"  + {d['deadline_date']} {d['title']}  (site)")
+        today = dt.date.today().isoformat()
+        upcoming = [d for d in found if d["deadline_date"] >= today and d.get("status") != "cancelled"]
+        if upcoming:
+            say(f"Eklendi ✓ {len(upcoming)} yaklaşan tarih bulundu, post-it'e eklendi. "
+                "Site birkaç saatte bir kontrol edilecek.")
+        else:
+            say("Eklendi ✓ Şu an yaklaşan bir tarih yok; sayfa değişirse otomatik görünecek.")
     return changed_any
