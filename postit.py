@@ -31,6 +31,7 @@ GREEN = "#558B2F"
 WIDTH, HEIGHT = 340, 460   # varsayılan boyut (köşeden sürükleyerek değiştirilebilir)
 MIN_W, MIN_H = 300, 170
 REFRESH_MS = 60_000
+PIN_MS = 2_000
 
 TR_MONTHS = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
 TR_DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
@@ -45,21 +46,34 @@ def hide_dock_icon():
         pass
 
 
+def _desktop_level():
+    """Masaüstü ikonlarının hemen üstündeki pencere seviyesi. CoreGraphics'e doğrudan sorulur
+    (büyük Quartz paketini yüklemeye gerek yok)."""
+    import ctypes
+    cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+    cg.CGWindowLevelForKey.restype = ctypes.c_int32
+    cg.CGWindowLevelForKey.argtypes = [ctypes.c_int32]
+    return cg.CGWindowLevelForKey(18) + 1   # 18 = kCGDesktopIconWindowLevelKey
+
+
+DESKTOP_LEVEL = _desktop_level()
+
+
 def pin_to_desktop():
     """Post-it'i masaüstü katmanına koy: uygulama pencerelerinin ALTINDA, masaüstü ikonlarının
     üstünde kalır; tüm masaüstlerinde (Spaces) görünür, Cmd-Tab/Mission Control'de çıkmaz."""
     try:
         from AppKit import NSApplication
-        from Quartz import CGWindowLevelForKey, kCGDesktopIconWindowLevelKey
-        level = CGWindowLevelForKey(kCGDesktopIconWindowLevelKey) + 1
         behavior = (1 << 0) | (1 << 4) | (1 << 6)  # CanJoinAllSpaces | Stationary | IgnoresCycle
         for w in NSApplication.sharedApplication().windows():
-            if w.level() != level:
-                w.setLevel_(level)
+            # Koşulsuz uygula: macOS bazen pencereyi normal katmana alıp level()'i değiştirmeden bırakıyor
+            w.setLevel_(DESKTOP_LEVEL)
             w.setCollectionBehavior_(behavior)
             w.setHasShadow_(True)
-    except Exception:
-        pass
+    except Exception as e:
+        if not getattr(pin_to_desktop, "_warned", False):  # log'u doldurmasın: bir kere yaz
+            pin_to_desktop._warned = True
+            print("pin_to_desktop hatası:", repr(e), flush=True)
 
 
 def read_json(path, default):
@@ -166,6 +180,7 @@ class PostIt:
         pin_to_desktop()
         self.root.after(300, pin_to_desktop)
         self.root.after(REFRESH_MS, self.tick)
+        self.root.after(PIN_MS, self.keep_pinned)
 
     def make_draggable(self, w):
         w.bind("<ButtonPress-1>", self.drag_start, add="+")
@@ -431,9 +446,17 @@ class PostIt:
         subprocess.Popen(["osascript", "-l", "JavaScript", "-e", script])
 
     def tick(self):
-        self.render()
-        pin_to_desktop()
-        self.root.after(REFRESH_MS, self.tick)
+        try:
+            self.render()
+        finally:  # bir hata olsa bile yenileme döngüsü durmasın
+            self.root.after(REFRESH_MS, self.tick)
+
+    def keep_pinned(self):
+        """Sık sık masaüstü katmanına geri koy; başka bir şey üste çıkarırsa en geç 2 sn'de düzelir."""
+        try:
+            pin_to_desktop()
+        finally:
+            self.root.after(PIN_MS, self.keep_pinned)
 
     # ---- çizim ----------------------------------------------------------
     def render(self, force=False):

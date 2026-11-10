@@ -110,6 +110,22 @@ Hocanın sonradan uzattığı/değiştirdiği tarihler otomatik güncellenir: ma
 okunur, en son duyurulan tarih geçerli olur, iptal edilenler listeden düşer. Her taramanın
 sonunda aynı işin tekrar eden kayıtları da ayıklanır.
 
+## Gizlilik: verilerin nereye gidiyor?
+
+- **Program senin Mac'inde çalışır.** Mailleri okuma, tarihe göre süzme, post-it'i çizme, siteleri
+  kontrol etme gibi işleri bu klasördeki kod yapar. Başka bir sunucu yok.
+- **Claude'a giden kısım:** Bir mailin, sitenin ya da dosyanın *içinde deadline olup olmadığını
+  anlamak* ve aynı işin tekrarlarını birleştirmek için o metin, **senin Claude hesabın üzerinden
+  Anthropic'e** (Claude'u yapan şirket) gönderilir. Bu, claude.ai'da bir mesaj yazmakla aynıdır;
+  hesabının gizlilik ayarları geçerlidir. Sohbetlerinin model eğitiminde kullanılmasını istemiyorsan
+  claude.ai → **Ayarlar → Gizlilik** kısmından kapatabilirsin.
+- Sadece **yeni** mailler gönderilir; bir kez işlenen mail tekrar gönderilmez.
+- **GitHub'a giden:** sadece kod. `data/` klasörü (mail başlıkları, deadline'lar, eklediğin
+  siteler/dosyalar) asla gönderilmez.
+- **iCloud:** Belgeler klasörün iCloud ile senkronize ediliyorsa `data/` klasörü de (diğer
+  belgelerin gibi) kendi iCloud hesabına yedeklenir. Python ortamı bu yüzden iCloud dışında,
+  `~/Library/Application Support/Deadline Hatirlatici/` içinde durur.
+
 ## Ayarlar
 
 `deadline_reminder.py` dosyasının başında:

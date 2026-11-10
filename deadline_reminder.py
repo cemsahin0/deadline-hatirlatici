@@ -77,7 +77,10 @@ değilse "".
 (örn. "CS405 Project 1 teslimi").
 - source: kimden geldiği, kısa (örn. "SUCourse - CS405", "Internship Office").
 - Mailler eskiden yeniye sıralı gelir. Aynı iş zaten "bilinen deadline'lar" listesinde varsa \
-AYNI title'ı birebir kullan.
+AYNI title'ı birebir kullan. Bu, iş başka bir kaynaktan (mail, ders web sitesi, PDF/Word belgesi) \
+gelmiş olsa ve farklı yazılmış olsa da geçerli: aynı ders kodu + aynı iş (aynı sınav, aynı ödev, \
+aynı proje aşaması) = aynı title. Örn. listede "ENS210 Midterm" varken sitede "Midterm 1" ya da \
+mailde "ENS 210 ara sınav" görürsen title'ı "ENS210 Midterm" yaz.
 - ÇOK ÖNEMLİ - uzatma/değişiklik: Bir mail önceden verilmiş bir tarihi değiştiriyorsa ("deadline \
 extended", "new deadline", "ertelendi", "uzatıldı", "postponed", "moved to") listedeki title'ı \
 birebir kullanıp YENİ tarihi yaz, status "active". İş iptal edildiyse aynı title ile \
@@ -224,11 +227,21 @@ MERGE_SCHEMA = {
     "additionalProperties": False,
 }
 
-MERGE_SYSTEM = """Sana bir öğrencinin maillerinden çıkarılmış gelecekteki deadline listesi verilecek. \
-Bazıları AYNI işin tekrarı olabilir: farklı yazılmış başlıklar, hatırlatma mailleri, ya da hocanın \
-sonradan uzattığı/değiştirdiği tarihler. Aynı işe ait kayıtları grupla; her grupta SADECE en son \
-gönderilen maildeki (mail_date en yeni) tarihi tut, diğerlerini "drop" listesine koy. Farklı işleri \
-(örn. Project 1 ve Project 2, ya da farklı dersler) asla birleştirme. Emin değilsen bırakma."""
+MERGE_SYSTEM = """Sana bir öğrencinin gelecekteki deadline listesi verilecek. Kayıtlar farklı \
+kaynaklardan gelir: mail, dersin web sitesi, öğrencinin eklediği PDF/Word belgesi. Bazıları AYNI işin \
+tekrarıdır: farklı yazılmış başlıklar (Türkçe/İngilizce, "Midterm" / "Ara sınav" / "Midterm 1", \
+"HW2" / "Homework 2" / "Assignment 2"), hatırlatma mailleri, ya da hocanın sonradan uzattığı/değiştirdiği \
+tarihler. Aynı ders kodu + aynı iş ise aynı kayıttır, tarihleri farklı olsa bile.
+
+Her grupta TEK kayıt kalsın:
+1. Bir kayıt açıkça değişiklik/uzatma duyurusundan geliyorsa (konu ya da başlıkta "extended", "new \
+deadline", "ertelendi", "uzatıldı", "değişti" vb.) onu tut.
+2. Yoksa bilginin en yeni olduğu kaydı tut (görülme tarihi en yeni olan).
+3. Tarih aynıysa saati belli olan / başlığı daha açıklayıcı olanı tut.
+Grubun geri kalanını "drop" listesine koy ve reason'da hangi kayıtla birleştirdiğini yaz.
+
+Farklı işleri asla birleştirme: Midterm 1 ile Midterm 2, Project Milestone 1 ile Milestone 2, \
+farklı dersler, aynı dersin farklı ödevleri. Emin değilsen bırakma."""
 
 
 def merge_duplicates(state):
@@ -239,8 +252,12 @@ def merge_duplicates(state):
     if len(items) < 2:
         state["dropped"] = []
         return
+    def kind(d):
+        mid = str(d.get("mail_id", ""))
+        return "ders sitesi" if mid.startswith("site:") else "belge" if mid.startswith("file:") else "mail"
     lines = [f"[{i}] {d['title']} | tarih: {d['deadline_date']} {d['deadline_time']} | "
-             f"kaynak: {d['source']} | mail: \"{d['mail_subject']}\" ({d['mail_date'][:10]})"
+             f"kaynak türü: {kind(d)} ({d['source']}) | başlık: \"{d['mail_subject']}\" | "
+             f"görülme tarihi: {d['mail_date'][:16]}"
              for i, d in enumerate(items)]
     try:
         result = ask_claude(MERGE_SYSTEM, "\n".join(lines), MERGE_SCHEMA, "medium")

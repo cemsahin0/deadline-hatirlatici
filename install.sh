@@ -5,7 +5,10 @@
 #  - Mac açılınca post-it'i açan ve mailleri her 10 dakikada bir tarayan servisleri kurar
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
-PY="$DIR/.venv/bin/python"
+# Python ortamı iCloud'un senkronize etmediği yerde dursun: Belgeler/Masaüstü iCloud'daysa
+# macOS dosyaları buluta alıp Mac'ten silebiliyor ve post-it açılışta bozuluyor.
+VENV="$HOME/Library/Application Support/Deadline Hatirlatici/venv"
+PY="$VENV/bin/python"
 AGENTS="$HOME/Library/LaunchAgents"
 mkdir -p "$AGENTS" "$DIR/data"
 
@@ -28,9 +31,11 @@ if [ ! -x "$PY" ] || ! good_python "$PY"; then
   say "Python ortamı kuruluyor..."
   BASE_PY="$(find_python)" || fail "Uygun Python bulunamadı.
 python.org/downloads adresinden en yeni Python'u (macOS installer) kur, sonra bu komutu tekrar çalıştır."
-  rm -rf "$DIR/.venv"
-  "$BASE_PY" -m venv "$DIR/.venv"
+  rm -rf "$VENV"
+  mkdir -p "$(dirname "$VENV")"
+  "$BASE_PY" -m venv "$VENV"
 fi
+rm -rf "$DIR/.venv"   # eski sürümlerin proje klasörüne kurduğu ortam
 "$PY" -m pip install -q --disable-pip-version-check pyobjc-framework-Cocoa pyobjc-framework-Quartz certifi
 
 # ---- 2. Claude Code ------------------------------------------------------------
