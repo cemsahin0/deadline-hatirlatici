@@ -31,7 +31,7 @@ python.org/downloads adresinden en yeni Python'u (macOS installer) kur, sonra bu
   rm -rf "$DIR/.venv"
   "$BASE_PY" -m venv "$DIR/.venv"
 fi
-"$PY" -m pip install -q --disable-pip-version-check pyobjc-framework-Cocoa pyobjc-framework-Quartz
+"$PY" -m pip install -q --disable-pip-version-check pyobjc-framework-Cocoa pyobjc-framework-Quartz certifi
 
 # ---- 2. Claude Code ------------------------------------------------------------
 CLAUDE="$(cd "$DIR" && "$PY" -c 'import deadline_reminder as d; print(d.CLAUDE)')"

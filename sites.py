@@ -10,6 +10,7 @@ Site listesi: data/sites.txt (her satıra bir link, # ile başlayan satırlar yo
 import datetime as dt
 import hashlib
 import html.parser
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,6 +18,12 @@ import urllib.robotparser
 
 UA = "DeadlineHatirlatici/1.0 (kisisel ders takvimi hatirlaticisi; birkac saatte bir tek istek)"
 CHECK_EVERY_H = 6
+
+try:  # python.org Python kendi sertifika listesini getirmiyor; certifi'ninkini kullan
+    import certifi
+    SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    SSL_CTX = ssl.create_default_context()
 TIMEOUT = 20
 MAX_BYTES = 3_000_000
 MAX_CHARS = 40_000
@@ -81,15 +88,15 @@ def read_site_list(path):
 
 
 def robots_allows(url):
-    """robots.txt bu aracı engelliyor mu? robots.txt okunamazsa izinli sayılır."""
+    """robots.txt bu aracı engelliyor mu? Dosya yoksa izinli; ağ hatası olursa hata fırlatır."""
     u = urllib.parse.urlsplit(url)
     robots = f"{u.scheme}://{u.netloc}/robots.txt"
     try:
         req = urllib.request.Request(robots, headers={"User-Agent": UA})
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with urllib.request.urlopen(req, timeout=TIMEOUT, context=SSL_CTX) as r:
             body = r.read(500_000).decode("utf-8", "replace")
-    except Exception:
-        return True
+    except urllib.error.HTTPError as e:
+        return e.code not in (401, 403)   # robots.txt yok (404 vb.) → izinli
     rp = urllib.robotparser.RobotFileParser()
     rp.parse(body.splitlines())
     return rp.can_fetch(UA, url)
@@ -104,7 +111,7 @@ def fetch(url, meta):
         headers["If-Modified-Since"] = meta["last_modified"]
     req = urllib.request.Request(url, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with urllib.request.urlopen(req, timeout=TIMEOUT, context=SSL_CTX) as r:
             ctype = r.headers.get("Content-Type", "")
             if not any(t in ctype for t in ("html", "text/plain", "xml")) and ctype:
                 return "unsupported", "", ctype, meta
