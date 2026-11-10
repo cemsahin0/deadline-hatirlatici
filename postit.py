@@ -16,6 +16,10 @@ DONE_FILE = DATA / "done.json"
 WIN_FILE = DATA / "window.json"
 SITES_FILE = DATA / "sites.txt"
 STATE_FILE = DATA / "state.json"
+MANUAL_FILE = DATA / "manual.json"      # kendi eklediğin gizli deadline'lar: hiçbir yere gönderilmez
+SETTINGS_FILE = DATA / "settings.json"  # {"allowed_senders": [...]}
+WINDOW_DAYS = 30
+TR_MONTH_PREFIX = ["oca", "şub", "mar", "nis", "may", "haz", "tem", "ağu", "eyl", "eki", "kas", "ara"]
 FILE_TYPES = ('{"com.adobe.pdf", "org.openxmlformats.wordprocessingml.document", "com.microsoft.word.doc", '
               '"public.rtf", "public.plain-text", "org.oasis-open.opendocument.text"}')
 
@@ -81,6 +85,50 @@ def read_json(path, default):
         return json.loads(path.read_text())
     except Exception:
         return default
+
+
+def parse_tr_date(text, today=None):
+    """'25.11', '25.11.2026 23:59', '25/11', '2026-11-25', '25 Kasım 14:00' → (YYYY-MM-DD, 'HH:MM' ya da '')."""
+    import re
+    today = today or dt.date.today()
+    t = text.strip().lower().replace("i̇", "i")
+    tm = ""
+    m = re.search(r"(\d{1,2})[:.](\d{2})\s*$", t)
+    if m and re.search(r"\d\s+\d{1,2}[:.]\d{2}\s*$|[a-zçğıöşü]\s+\d{1,2}[:.]\d{2}\s*$", t):
+        h, mi = int(m.group(1)), int(m.group(2))
+        if h < 24 and mi < 60:
+            tm = f"{h:02d}:{mi:02d}"
+            t = t[:m.start()].strip()
+    rel = {"bugün": 0, "bugun": 0, "yarın": 1, "yarin": 1}
+    if t in rel:
+        return (today + dt.timedelta(days=rel[t])).isoformat(), tm
+    y = None
+    m = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", t)
+    if m:
+        y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    else:
+        m = re.fullmatch(r"(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?", t)
+        if m:
+            d, mo = int(m.group(1)), int(m.group(2))
+            y = int(m.group(3)) if m.group(3) else None
+        else:
+            m = re.fullmatch(r"(\d{1,2})\s+([a-zçğıöşü]+)(?:\s+(\d{4}))?", t)
+            if not m:
+                return None
+            d = int(m.group(1))
+            mo = next((i + 1 for i, p in enumerate(TR_MONTH_PREFIX) if m.group(2).startswith(p)), None)
+            if mo is None:
+                return None
+            y = int(m.group(3)) if m.group(3) else None
+    if y is not None and y < 100:
+        y += 2000
+    try:
+        day = dt.date(y or today.year, mo, d)
+        if y is None and day < today:   # yıl yazılmadıysa ve tarih geçtiyse: gelecek yıl
+            day = dt.date(today.year + 1, mo, d)
+    except ValueError:
+        return None
+    return day.isoformat(), tm
 
 
 def item_key(d):
@@ -161,10 +209,12 @@ class PostIt:
 
         # Sağ tık menüsü
         self.menu = tk.Menu(root, tearoff=0)
+        self.menu.add_command(label="🔒 Kendim ekle (gizli)…", command=self.add_manual)
         self.menu.add_command(label="Mailleri şimdi tara", command=self.refresh_mail)
         self.menu.add_command(label="Ders sitesi ekle…", command=self.add_site)
         self.menu.add_command(label="Dosya ekle (PDF, Word)…", command=self.add_file)
-        self.menu.add_command(label="Siteleri ve dosyaları yönet…", command=self.manage_sites)
+        self.menu.add_command(label="Siteleri, dosyaları, notları yönet…", command=self.manage_sites)
+        self.menu.add_command(label="Hangi mailler okunsun? (gizlilik)…", command=self.privacy_settings)
         self.menu.add_separator()
         self.menu.add_command(label="Bitti işaretlenenleri geri getir", command=self.restore_done)
         self.menu.add_separator()
@@ -371,6 +421,56 @@ class PostIt:
         subprocess.Popen([sys.executable, str(BASE / "deadline_reminder.py"), *args],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=BASE)
 
+    def add_manual(self):
+        """Gizli bir deadline'ı elle ekle. Sadece bu Mac'te (data/manual.json) durur, hiçbir yere gitmez."""
+        ok, title = self.osa('display dialog "Ne yapman gerekiyor?\n(Bu not sadece bu Mac\'te durur, '
+                             'Claude dahil hiçbir yere gönderilmez.)" default answer "" '
+                             'with title "🔒 Kendim ekle" buttons {"Vazgeç", "Devam"} default button "Devam" '
+                             'cancel button "Vazgeç"', "return text returned of result")
+        title = title.strip()
+        if not ok or not title:
+            return
+        prompt = "Son tarih ne zaman?\n\nÖrnekler:  25.11   ·   25.11.2026 23:59   ·   25 Kasım 14:00"
+        while True:
+            ok, when = self.osa('display dialog (item 1 of argv) default answer "" with title "🔒 Kendim ekle" '
+                                'buttons {"Vazgeç", "Ekle"} default button "Ekle" cancel button "Vazgeç"',
+                                "return text returned of result", args=[prompt])
+            if not ok:
+                return
+            parsed = parse_tr_date(when)
+            if parsed:
+                break
+            prompt = f"\"{when}\" tarihini anlayamadım. Gün.Ay şeklinde yaz:\n\nÖrnekler:  25.11   ·   25.11.2026 23:59"
+        import uuid
+        manual = read_json(MANUAL_FILE, [])
+        manual.append({"title": title, "deadline_date": parsed[0], "deadline_time": parsed[1],
+                       "source": "🔒 kendi notun", "status": "active", "mail_id": f"manual:{uuid.uuid4().hex[:8]}"})
+        MANUAL_FILE.write_text(json.dumps(manual, ensure_ascii=False, indent=1))
+        self.render(force=True)
+
+    def remove_manual(self, ids):
+        manual = [m for m in read_json(MANUAL_FILE, []) if m["mail_id"] not in ids]
+        MANUAL_FILE.write_text(json.dumps(manual, ensure_ascii=False, indent=1))
+        self.render(force=True)
+
+    def privacy_settings(self):
+        """Claude'a sadece hangi göndericilerin maillerinin gideceğini ayarla."""
+        current = ", ".join(read_json(SETTINGS_FILE, {}).get("allowed_senders", []))
+        msg = ("Sadece bu adreslerden gelen mailler Claude'a gönderilir; diğerlerinin içeriği hiç okunmaz.\n\n"
+               "Virgülle ayır. Örnek:  @sabanciuniv.edu, hoca@gmail.com\n"
+               "Boş bırakırsan TÜM mailler gönderilir.")
+        ok, out = self.osa('display dialog (item 1 of argv) default answer (item 2 of argv) '
+                           'with title "Hangi mailler okunsun?" buttons {"Vazgeç", "Kaydet"} '
+                           'default button "Kaydet" cancel button "Vazgeç"',
+                           "return text returned of result", args=[msg, current])
+        if not ok:
+            return
+        pats = [p.strip() for p in out.replace(";", ",").split(",") if p.strip()]
+        settings = read_json(SETTINGS_FILE, {})
+        settings["allowed_senders"] = pats
+        SETTINGS_FILE.write_text(json.dumps(settings, ensure_ascii=False, indent=1))
+        self.refresh_mail()  # liste genişlediyse atlanan mailler şimdi değerlendirilsin
+
     def add_file(self):
         """Mac'in dosya seçme penceresiyle PDF/Word seç (varsayılan: İndirilenler); sonuç bildirimle gelir."""
         ok, out = self.osa(
@@ -402,9 +502,11 @@ class PostIt:
         for f in files:
             p = Path(f)
             labels[f"📄 {p.name}   ({p.parent.name})"] = ("file", f)
+        for m in read_json(MANUAL_FILE, []):
+            labels[f"🔒 {m['title']}   ({m['deadline_date']})"] = ("manual", m["mail_id"])
         if not labels:
-            ok, out = self.osa('display dialog "Henüz ders sitesi ya da dosya eklemedin." '
-                               'with title "Siteler ve dosyalar" '
+            ok, out = self.osa('display dialog "Henüz ders sitesi, dosya ya da not eklemedin." '
+                               'with title "Siteler, dosyalar, notlar" '
                                'buttons {"Kapat", "Dosya ekle…", "Site ekle…"} default button "Site ekle…"',
                                "return button returned of result")
             if out == "Site ekle…":
@@ -413,8 +515,8 @@ class PostIt:
                 self.add_file()
             return
         ok, out = self.osa('set chosen to choose from list (items 1 thru -1 of argv) '
-                           'with title "Siteler ve dosyalar" '
-                           'with prompt "Eklediğin siteler ve dosyalar. Kaldırmak istediklerini seç:" '
+                           'with title "Siteler, dosyalar, notlar" '
+                           'with prompt "Eklediğin siteler, dosyalar ve kendi notların. Kaldırmak istediklerini seç:" '
                            'OK button name "Seçilenleri kaldır" cancel button name "Kapat" '
                            'with multiple selections allowed',
                            'if chosen is false then return ""',
@@ -423,6 +525,9 @@ class PostIt:
         chosen = [labels[l] for l in out.splitlines() if l in labels] if ok else []
         rm_sites = {v for k, v in chosen if k == "site"}
         rm_files = [v for k, v in chosen if k == "file"]
+        rm_manual = {v for k, v in chosen if k == "manual"}
+        if rm_manual:
+            self.remove_manual(rm_manual)
         if rm_sites:
             self.write_sites([u for u in urls if u not in rm_sites])
             self.refresh_mail()  # kaldırılan sitenin deadline'ları listeden düşsün
@@ -437,6 +542,14 @@ class PostIt:
     def open_mail(self, d):
         mid = d.get("mail_id")
         if not mid:
+            return
+        if str(mid).startswith("manual:"):   # kendi notun: silmek ister misin?
+            ok, out = self.osa('display dialog ("🔒 " & (item 1 of argv) & return & (item 2 of argv)) '
+                               'with title "Kendi notun" buttons {"Kapat", "Sil"} default button "Kapat"',
+                               "return button returned of result",
+                               args=[d["title"], f"{d['deadline_date']} {d.get('deadline_time', '')}".strip()])
+            if out == "Sil":
+                self.remove_manual({mid})
             return
         if str(mid).startswith(("site:", "file:")):   # site → tarayıcıda, dosya → kendi uygulamasında aç
             subprocess.Popen(["open", str(mid)[5:]])
@@ -470,6 +583,9 @@ class PostIt:
             w.destroy()
 
         data = read_json(OUT_FILE, None)
+        manual = read_json(MANUAL_FILE, [])
+        if data is None and manual:
+            data = {"items": [], "updated": ""}
         if data is None:
             log = DATA / "reminder.log"
             last = log.read_text().strip().splitlines()[-1] if log.exists() and log.stat().st_size else ""
@@ -482,7 +598,10 @@ class PostIt:
             return
 
         items, finished = [], []
-        for d in data.get("items", []):
+        limit = today + dt.timedelta(days=WINDOW_DAYS)
+        all_items = data.get("items", []) + [m for m in manual if m["deadline_date"] <= limit.isoformat()]
+        all_items.sort(key=lambda d: (d["deadline_date"], d.get("deadline_time") or "99:99"))
+        for d in all_items:
             day = dt.date.fromisoformat(d["deadline_date"])
             if day < today:
                 continue
@@ -505,7 +624,7 @@ class PostIt:
         self.urgent = sum(1 for day, _ in items if (day - today).days <= 3)
         self.update_title()
 
-        upd = data.get("updated", "")[11:16]
+        upd = data.get("updated", "")[11:16] or "—"
         self.footer.config(text=f"Son tarama {upd}  ·  çift tık: kaynağı aç  ·  sağ tık: menü")
         self.fit_list()
 

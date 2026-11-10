@@ -36,6 +36,7 @@ OUT_FILE = DATA / "deadlines.json"
 LOCK_FILE = DATA / ".lock"
 FETCH_JS = BASE / "fetch_mail.js"
 SITES_FILE = DATA / "sites.txt"   # takip edilen ders siteleri (her satıra bir link)
+SETTINGS_FILE = DATA / "settings.json"   # {"allowed_senders": ["@okul.edu", ...]}; boş = hepsi
 
 SCHEMA = {
     "type": "object",
@@ -154,11 +155,37 @@ def save_state(state):
     tmp.replace(STATE_FILE)
 
 
+def allowed_senders():
+    try:
+        return [p for p in json.loads(SETTINGS_FILE.read_text()).get("allowed_senders", []) if p.strip()]
+    except Exception:
+        return []
+
+
+def sender_allowed(sender, patterns):
+    """fetch_mail.js'teki senderAllowed ile aynı kural."""
+    if not patterns:
+        return True
+    s = (sender or "").lower()
+    addr = s[s.find("<") + 1:s.find(">")] if "<" in s and ">" in s else s
+    addr = addr.strip()
+    for p in patterns:
+        p = p.strip().lower()
+        if not p.startswith("@") and "@" not in p:
+            p = "@" + p
+        if (p.startswith("@") and (addr.endswith(p) or addr.endswith("." + p[1:]))) or addr == p:
+            return True
+    return False
+
+
 def fetch_new_mails(known_ids, limit):
     known_file = DATA / ".known_ids.json"
     known_file.write_text(json.dumps(list(known_ids)))
+    allow_file = DATA / ".allowed.json"
+    allow_file.write_text(json.dumps(allowed_senders()))
     out = subprocess.run(
-        ["osascript", "-l", "JavaScript", str(FETCH_JS), str(LOOKBACK_DAYS), str(known_file), str(limit)],
+        ["osascript", "-l", "JavaScript", str(FETCH_JS), str(LOOKBACK_DAYS), str(known_file), str(limit),
+         str(allow_file)],
         capture_output=True, text=True, timeout=1800,
     )
     if out.returncode != 0:
@@ -366,12 +393,26 @@ def main():
         log(f"{len(write_output(state))} deadline yazıldı.")
         return
 
+    # İzin listesi genişletildiyse, daha önce gizli diye atlanan mailler tekrar değerlendirilsin
+    allow = allowed_senders()
+    for k in [k for k, r in state["processed"].items() if r.get("skipped") and sender_allowed(r.get("sender"), allow)]:
+        del state["processed"][k]
+
     found_any = False
     while True:
         res = fetch_new_mails(state["processed"].keys(), BATCH_SIZE)
-        mails = res["messages"]
-        if not mails:
+        mails = [m for m in res["messages"] if not m.get("skipped")]
+        skipped = [m for m in res["messages"] if m.get("skipped")]
+        if not res["messages"]:
             break
+        for m in skipped:  # gizli tutulan mail: Claude'a gönderilmez, sadece "bakıldı" diye işaretlenir
+            state["processed"][m["id"]] = {"sender": m["sender"], "date": m["date"], "skipped": True,
+                                           "deadlines": []}
+        if skipped:
+            log(f"{len(skipped)} mail izinli gönderici listesinde olmadığı için gönderilmedi")
+        if not mails:
+            save_state(state)
+            continue
         done = sum(1 for _ in state["processed"])
         log(f"{len(mails)} yeni mail işleniyor (aralıkta toplam {res['total_in_range']}, işlenmiş {done})")
         found = extract_deadlines(mails, state)

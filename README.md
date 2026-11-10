@@ -67,7 +67,7 @@ Mac her açıldığında kendiliğinden gelir; kayıtlar `data/` klasöründe sa
 | **🔗** | ders sitesi ekle (bkz. Ders siteleri) |
 | **📎** | PDF / Word dosyası ekle (bkz. PDF ve Word dosyaları) |
 | **⟳** | mailleri hemen tarar (normalde açılışta ve her 10 dakikada bir) |
-| **Sağ tık** | menü: şimdi tara, site/dosya ekle, siteleri ve dosyaları yönet, bitti işaretlenenleri geri getir, kapat |
+| **Sağ tık** | menü: kendim ekle (gizli), şimdi tara, site/dosya ekle, yönet, gizlilik ayarı, bitti işaretlenenleri geri getir, kapat |
 
 ## PDF ve Word dosyaları
 
@@ -94,7 +94,7 @@ Bazı hocalar duyuruları mail yerine kendi web sitesine koyuyor. Onları da ekl
 
 Birkaç saniye içinde sağ üstte bir bildirim gelir: kaç tarih bulunduğunu ya da neden
 okunamadığını (link yanlış, sayfa şifreli vb.) ve ne yapman gerektiğini söyler.
-Siteyi çıkarmak için: post-it'e **sağ tık → Siteleri ve dosyaları yönet…** → siteyi seç → **Seçilenleri kaldır**.
+Siteyi çıkarmak için: post-it'e **sağ tık → Siteleri, dosyaları, notları yönet…** → siteyi seç → **Seçilenleri kaldır**.
 
 Eklediğin siteler sadece senin bilgisayarında durur (`data/sites.txt`), GitHub'a gönderilmez.
 
@@ -120,6 +120,14 @@ sonunda aynı işin tekrar eden kayıtları da ayıklanır.
   hesabının gizlilik ayarları geçerlidir. Sohbetlerinin model eğitiminde kullanılmasını istemiyorsan
   claude.ai → **Ayarlar → Gizlilik** kısmından kapatabilirsin.
 - Sadece **yeni** mailler gönderilir; bir kez işlenen mail tekrar gönderilmez.
+- **Hangi mailler gönderilsin?** Post-it'e sağ tık → **Hangi mailler okunsun? (gizlilik)…** ile
+  izinli göndericileri yaz (örn. `@sabanciuniv.edu`). Listede olmayan maillerin konusu ve içeriği
+  **hiç okunmaz**, hiçbir yere gönderilmez. Alt alan adları da sayılır (`sucourse.sabanciuniv.edu`).
+  Boş bırakırsan tüm mailler gönderilir.
+- **Gizli bir iş mi var?** Sağ tık → **🔒 Kendim ekle (gizli)…** → ne yapacağını ve tarihi yaz
+  (`25.11`, `25.11.2026 23:59`, `25 Kasım 14:00`, `yarın`). Bu not sadece bu Mac'te
+  (`data/manual.json`) durur, Claude dahil hiçbir yere gönderilmez; post-it'te diğerleri gibi görünür.
+  Çift tıklayınca silebilirsin.
 - **GitHub'a giden:** sadece kod. `data/` klasörü (mail başlıkları, deadline'lar, eklediğin
   siteler/dosyalar) asla gönderilmez.
 - **iCloud:** Belgeler klasörün iCloud ile senkronize ediliyorsa `data/` klasörü de (diğer
