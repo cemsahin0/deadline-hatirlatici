@@ -82,12 +82,88 @@ def _desktop_level():
 DESKTOP_LEVEL = _desktop_level()
 
 
+class DesktopSpaces:
+    """Post-it'i sadece normal masaüstü alanlarına (Spaces) koyar, tam ekran uygulama alanlarına değil.
+
+    "Tüm masaüstlerinde görün" ayarlı pencereler masaüstüne geçiş animasyonunda görünmüyor, geçiş
+    bitince 1-2 sn sonra çiziliyor. Pencere doğrudan masaüstü alanına ait olursa masaüstüyle birlikte
+    kayarak gelir. macOS'un (resmi olmayan ama yaygın kullanılan) CGS fonksiyonlarıyla yapılır;
+    çalışmazsa eski yönteme (tüm masaüstleri) dönülür."""
+
+    def __init__(self):
+        import ctypes
+        self.ct = ctypes
+        cg = ctypes.CDLL("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+        cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+        cg.CGSMainConnectionID.restype = ctypes.c_int
+        for name in ("CGSCopyManagedDisplaySpaces",):
+            getattr(cg, name).restype = ctypes.c_void_p
+            getattr(cg, name).argtypes = [ctypes.c_int]
+        cg.CGSCopySpacesForWindows.restype = ctypes.c_void_p
+        cg.CGSCopySpacesForWindows.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
+        for name in ("CGSAddWindowsToSpaces", "CGSRemoveWindowsFromSpaces"):
+            getattr(cg, name).restype = None
+            getattr(cg, name).argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p]
+        cf.CFRelease.argtypes = [ctypes.c_void_p]
+        self.cg, self.cf, self.cid = cg, cf, cg.CGSMainConnectionID()
+
+    def _take(self, ptr):
+        """CGSCopy* sonucunu Python nesnesine çevir ve sahipliği dengele (bellek sızmasın)."""
+        import objc
+        if not ptr:
+            return []
+        obj = objc.objc_object(c_void_p=ptr)
+        out = [dict(x) if hasattr(x, "keys") else x for x in obj]
+        self.cf.CFRelease(ptr)
+        return out
+
+    def desktops(self):
+        ids = []
+        for disp in self._take(self.cg.CGSCopyManagedDisplaySpaces(self.cid)):
+            ids += [int(sp["ManagedSpaceID"]) for sp in disp["Spaces"] if int(sp["type"]) == 0]
+        return ids
+
+    def _arr(self, nums):
+        import objc
+        from Foundation import NSArray
+        a = NSArray.arrayWithArray_([int(n) for n in nums])
+        return a, objc.pyobjc_id(a)
+
+    def window_spaces(self, wid):
+        a, p = self._arr([wid])
+        return [int(x) for x in self._take(self.cg.CGSCopySpacesForWindows(self.cid, 7, p))]
+
+    def place(self, wid):
+        want = set(self.desktops())
+        if not want:
+            return
+        have = set(self.window_spaces(wid))
+        if have == want:
+            return
+        w, wp = self._arr([wid])
+        if want - have:
+            s, sp = self._arr(want - have)
+            self.cg.CGSAddWindowsToSpaces(self.cid, wp, sp)
+        if have - want:
+            s, sp = self._arr(have - want)
+            self.cg.CGSRemoveWindowsFromSpaces(self.cid, wp, sp)
+
+
+try:
+    SPACES = DesktopSpaces()
+    SPACES.desktops()
+except Exception as _e:
+    print("Masaüstü alanları okunamadı, tüm masaüstleri modu:", repr(_e), flush=True)
+    SPACES = None
+
+
 def pin_to_desktop():
     """Post-it'i masaüstü katmanına koy: uygulama pencerelerinin ALTINDA, masaüstü ikonlarının
     üstünde kalır; tüm masaüstlerinde (Spaces) görünür, Cmd-Tab/Mission Control'de çıkmaz."""
     try:
         from AppKit import NSApplication
-        behavior = (1 << 0) | (1 << 4) | (1 << 6)  # CanJoinAllSpaces | Stationary | IgnoresCycle
+        # Stationary | IgnoresCycle; masaüstü alanları okunamazsa CanJoinAllSpaces de (eski yöntem)
+        behavior = (1 << 4) | (1 << 6) | (0 if SPACES else (1 << 0))
         for w in NSApplication.sharedApplication().windows():
             # Sadece farklıysa değiştir: her seferinde yeniden yazmak masaüstü geçişlerinde
             # pencerenin kaybolup geç gelmesine yol açıyor
@@ -99,6 +175,8 @@ def pin_to_desktop():
                 w.setCanHide_(False)   # "Diğerlerini gizle" (Cmd-Opt-H) post-it'i gizlemesin
             if not w.hasShadow():
                 w.setHasShadow_(True)
+            if SPACES and w.isVisible():
+                SPACES.place(w.windowNumber())
     except Exception as e:
         if not getattr(pin_to_desktop, "_warned", False):  # log'u doldurmasın: bir kere yaz
             pin_to_desktop._warned = True
