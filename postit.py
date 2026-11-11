@@ -54,6 +54,21 @@ def hide_dock_icon():
         pass
 
 
+_ACTIVITY = None
+
+
+def disable_app_nap():
+    """macOS arka plandaki uygulamaları uyutuyor (App Nap); uyuyan post-it masaüstüne dönünce
+    kendini 1-2 sn geç çiziyordu. Uyumasın (uyku/ekran kapanmasını engellemez)."""
+    global _ACTIVITY
+    try:
+        from Foundation import NSProcessInfo, NSActivityUserInitiatedAllowingIdleSystemSleep
+        _ACTIVITY = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
+            NSActivityUserInitiatedAllowingIdleSystemSleep, "Masaüstü post-it'i her an görünür kalsın")
+    except Exception as e:
+        print("App Nap kapatılamadı:", repr(e), flush=True)
+
+
 def _desktop_level():
     """Masaüstü ikonlarının hemen üstündeki pencere seviyesi. CoreGraphics'e doğrudan sorulur
     (büyük Quartz paketini yüklemeye gerek yok)."""
@@ -74,10 +89,16 @@ def pin_to_desktop():
         from AppKit import NSApplication
         behavior = (1 << 0) | (1 << 4) | (1 << 6)  # CanJoinAllSpaces | Stationary | IgnoresCycle
         for w in NSApplication.sharedApplication().windows():
-            # Koşulsuz uygula: macOS bazen pencereyi normal katmana alıp level()'i değiştirmeden bırakıyor
-            w.setLevel_(DESKTOP_LEVEL)
-            w.setCollectionBehavior_(behavior)
-            w.setHasShadow_(True)
+            # Sadece farklıysa değiştir: her seferinde yeniden yazmak masaüstü geçişlerinde
+            # pencerenin kaybolup geç gelmesine yol açıyor
+            if w.level() != DESKTOP_LEVEL:
+                w.setLevel_(DESKTOP_LEVEL)
+            if w.collectionBehavior() != behavior:
+                w.setCollectionBehavior_(behavior)
+            if w.canHide():
+                w.setCanHide_(False)   # "Diğerlerini gizle" (Cmd-Opt-H) post-it'i gizlemesin
+            if not w.hasShadow():
+                w.setHasShadow_(True)
     except Exception as e:
         if not getattr(pin_to_desktop, "_warned", False):  # log'u doldurmasın: bir kere yaz
             pin_to_desktop._warned = True
@@ -716,6 +737,7 @@ def main():
     DATA.mkdir(exist_ok=True)
     root = tk.Tk()
     hide_dock_icon()
+    disable_app_nap()
     PostIt(root)
     root.mainloop()
 

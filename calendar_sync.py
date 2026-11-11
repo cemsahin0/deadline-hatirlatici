@@ -52,8 +52,9 @@ def _event_for(d):
         start = end - dt.timedelta(minutes=30)
         return {"summary": f"⏰ {d['title']}", "start": start.isoformat(), "end": end.isoformat(),
                 "allday": False, "notes": notes, "alarms": [-1440, -120]}
-    return {"summary": f"⏰ {d['title']}", "start": dt.datetime.combine(day, dt.time()).isoformat(),
-            "end": dt.datetime.combine(day + dt.timedelta(days=1), dt.time()).isoformat(),
+    # Tüm gün etkinlik: bitiş = başlangıç (Takvim, ertesi gün 00:00'ı iki günlük etkinlik sayıyor)
+    midnight = dt.datetime.combine(day, dt.time()).isoformat()
+    return {"summary": f"⏰ {d['title']}", "start": midnight, "end": midnight,
             "allday": True, "notes": notes, "alarms": [-1440 + 9 * 60]}   # bir önceki gün 09:00
 
 
