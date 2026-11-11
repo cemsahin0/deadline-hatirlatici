@@ -31,7 +31,10 @@ MODEL = "opus"            # Claude hesabındaki en güncel Opus modeli
 # ---------------------------------------------------------------------------
 
 BASE = Path(__file__).resolve().parent
-DATA = BASE / "data"
+# Kayıtlar iCloud'un dokunmadığı yerde: Belgeler/Masaüstü iCloud'daysa macOS dosyaları buluta alıp
+# Mac'ten silebiliyor ve arka plandaki tarama onları okuyamıyor.
+DATA = Path(os.environ.get("DEADLINE_DATA") or
+            Path.home() / "Library/Application Support/Deadline Hatirlatici/data")
 STATE_FILE = DATA / "state.json"
 OUT_FILE = DATA / "deadlines.json"
 LOCK_FILE = DATA / ".lock"

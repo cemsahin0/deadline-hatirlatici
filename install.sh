@@ -4,16 +4,32 @@
 #  - Claude Code aracını ve girişini kontrol eder
 #  - Mac açılınca post-it'i açan ve mailleri her 10 dakikada bir tarayan servisleri kurar
 set -e
-DIR="$(cd "$(dirname "$0")" && pwd)"
-# Python ortamı iCloud'un senkronize etmediği yerde dursun: Belgeler/Masaüstü iCloud'daysa
-# macOS dosyaları buluta alıp Mac'ten silebiliyor ve post-it açılışta bozuluyor.
-VENV="$HOME/Library/Application Support/Deadline Hatirlatici/venv"
-PY="$VENV/bin/python"
-AGENTS="$HOME/Library/LaunchAgents"
-mkdir -p "$AGENTS" "$DIR/data"
-
+DIR="$(cd "$(dirname "$0")" && pwd)"   # bu klasör: kodun ana kopyası (GitHub reposu)
 say()  { printf "\033[1m%s\033[0m\n" "$*"; }
 fail() { printf "\n\033[31m%s\033[0m\n" "$*"; exit 1; }
+# Çalışan kopya, Python ortamı ve kayıtlar iCloud'un dokunmadığı yerde durur: Belgeler/Masaüstü
+# iCloud'daysa macOS dosyaları buluta alıp Mac'ten silebiliyor ve arka plandaki program bozuluyor.
+APP="$HOME/Library/Application Support/Deadline Hatirlatici"
+VENV="$APP/venv"
+CODE="$APP/app"
+DATA="$APP/data"
+PY="$VENV/bin/python"
+AGENTS="$HOME/Library/LaunchAgents"
+mkdir -p "$AGENTS" "$CODE" "$DATA"
+
+# Kodu çalışan kopyaya aktar (güncellemede de tekrar çalıştırılır)
+cp "$DIR"/*.py "$DIR"/*.js "$CODE/"
+rm -rf "$CODE/__pycache__"
+
+# Eski sürümlerden kalan kayıtları (proje klasöründeki data/) yeni yere taşı
+if [ -d "$DIR/data" ]; then
+  if [ ! -f "$DATA/state.json" ]; then
+    say "Kayıtlar yeni yerine taşınıyor..."
+    cp -Rp "$DIR/data/." "$DATA/"
+  fi
+  [ -f "$DATA/state.json" ] || [ ! -f "$DIR/data/state.json" ] && rm -rf "$DIR/data"
+fi
+
 
 # ---- 1. Python (Tk 8.6+ olan bir python3 lazım) -------------------------------
 good_python() { "$1" -c "import tkinter, sys; sys.exit(0 if tkinter.TkVersion >= 8.6 else 1)" 2>/dev/null; }
@@ -39,7 +55,7 @@ rm -rf "$DIR/.venv"   # eski sürümlerin proje klasörüne kurduğu ortam
 "$PY" -m pip install -q --disable-pip-version-check pyobjc-framework-Cocoa pyobjc-framework-Quartz certifi
 
 # ---- 2. Claude Code ------------------------------------------------------------
-CLAUDE="$(cd "$DIR" && "$PY" -c 'import deadline_reminder as d; print(d.CLAUDE)')"
+CLAUDE="$(cd "$CODE" && "$PY" -c 'import deadline_reminder as d; print(d.CLAUDE)')"
 if ! "$CLAUDE" --version >/dev/null 2>&1; then
   fail "Claude Code bulunamadı. Terminal'de şunu çalıştır, bitince bu komutu tekrar çalıştır:
   curl -fsSL https://claude.ai/install.sh | bash"
@@ -47,7 +63,7 @@ fi
 if ! "$CLAUDE" -p --help 2>/dev/null | grep -q -- "--effort"; then
   fail "Claude Code sürümün eski ($("$CLAUDE" --version)). Güncelle:  $CLAUDE update"
 fi
-if ! (cd "$DIR/data" && echo "sadece OK yaz" | "$CLAUDE" -p --model haiku --tools "" \
+if ! (cd "$DATA" && echo "sadece OK yaz" | "$CLAUDE" -p --model haiku --tools "" \
        --no-session-persistence --setting-sources "" --strict-mcp-config >/dev/null 2>&1); then
   fail "Claude hesabına giriş yapılmamış. Terminal'de şunu çalıştır, tarayıcıda izin ver,
 sonra bu komutu tekrar çalıştır:
@@ -65,8 +81,8 @@ cat > "$AGENTS/$1.plist" <<EOF
 <dict>
   <key>Label</key><string>$1</string>
   <key>ProgramArguments</key>
-  <array><string>$PY</string><string>$DIR/$2</string></array>
-  <key>WorkingDirectory</key><string>$DIR</string>
+  <array><string>$PY</string><string>$CODE/$2</string></array>
+  <key>WorkingDirectory</key><string>$CODE</string>
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>$LOG</string>
   <key>StandardErrorPath</key><string>$LOG</string>
@@ -86,4 +102,5 @@ write_plist "com.deadline-hatirlatici.postit" "postit.py" \
 
 say "Kuruldu! Post-it masaüstünde açılıyor, ilk tarama arka planda başladı."
 echo "macOS izin sorarsa (Belgeler klasörü, Mail) → İzin Ver."
-echo "İlerleme:  tail -f \"$DIR/data/reminder.log\""
+echo "Kayıtlar: $DATA"
+echo "İlerleme:  tail -f \"$DATA/reminder.log\""

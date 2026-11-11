@@ -47,14 +47,14 @@ Repo private olduğu için arkadaşın önce eklenmeli:
 3. Yukarıdaki **Kurulum** adımlarını kendi Mac'inde uygular.
 
 Her bilgisayar **kendi** mailini okur ve **kendi** Claude hesabını kullanır; kimsenin
-kullanım hakkı birbirinden gitmez. Herkesin deadline'ları kendi `data/` klasöründe durur,
+kullanım hakkı birbirinden gitmez. Herkesin deadline'ları kendi bilgisayarındaki kayıt klasöründe durur,
 repoya hiç gönderilmez (`.gitignore`), yani kimse başkasının maillerini görmez.
 
 
 ## Kullanım
 
 Post-it masaüstüne yapışıktır: uygulamaların altında kalır, tüm masaüstlerinde görünür.
-Mac her açıldığında kendiliğinden gelir; kayıtlar `data/` klasöründe saklanır.
+Mac her açıldığında kendiliğinden gelir; kayıtlar bilgisayarında saklanır (bkz. **Dosyalar nerede?**).
 
 | | |
 |---|---|
@@ -110,7 +110,7 @@ Birkaç saniye içinde sağ üstte bir bildirim gelir: kaç tarih bulunduğunu y
 okunamadığını (link yanlış, sayfa şifreli vb.) ve ne yapman gerektiğini söyler.
 Siteyi çıkarmak için: post-it'e **sağ tık → Siteleri, dosyaları, notları yönet…** → siteyi seç → **Seçilenleri kaldır**.
 
-Eklediğin siteler sadece senin bilgisayarında durur (`data/sites.txt`), GitHub'a gönderilmez.
+Eklediğin siteler sadece senin bilgisayarında durur (kayıt klasöründe `sites.txt`), GitHub'a gönderilmez.
 
 Siteye zarar vermemek için:
 - Her site en fazla **6 saatte bir**, tek bir sayfa isteğiyle okunur (günde ~4 istek; linkler takip edilmez).
@@ -140,13 +140,21 @@ sonunda aynı işin tekrar eden kayıtları da ayıklanır.
   Boş bırakırsan tüm mailler gönderilir.
 - **Gizli bir iş mi var?** Sağ tık → **🔒 Kendim ekle (gizli)…** → ne yapacağını ve tarihi yaz
   (`25.11`, `25.11.2026 23:59`, `25 Kasım 14:00`, `yarın`). Bu not sadece bu Mac'te
-  (`data/manual.json`) durur, Claude dahil hiçbir yere gönderilmez; post-it'te diğerleri gibi görünür.
+  (kayıt klasöründe `manual.json`) durur, Claude dahil hiçbir yere gönderilmez; post-it'te diğerleri gibi görünür.
   Çift tıklayınca silebilirsin.
-- **GitHub'a giden:** sadece kod. `data/` klasörü (mail başlıkları, deadline'lar, eklediğin
+- **GitHub'a giden:** sadece kod. kayıt klasörü (mail başlıkları, deadline'lar, eklediğin
   siteler/dosyalar) asla gönderilmez.
-- **iCloud:** Belgeler klasörün iCloud ile senkronize ediliyorsa `data/` klasörü de (diğer
-  belgelerin gibi) kendi iCloud hesabına yedeklenir. Python ortamı bu yüzden iCloud dışında,
-  `~/Library/Application Support/Deadline Hatirlatici/` içinde durur.
+- **iCloud:** Kayıtlar iCloud'a gitmez; Belgeler klasörün iCloud'da olsa bile kayıt klasörü
+  senkronize edilmeyen `~/Library/Application Support` içindedir.
+
+## Dosyalar nerede?
+
+- **Bu klasör** (GitHub'dan indirdiğin): kodun ana kopyası. Burada değişiklik yapıp
+  `bash install.sh` çalıştırınca devreye girer.
+- **Çalışan program ve kayıtlar:** `~/Library/Application Support/Deadline Hatirlatici/`
+  (`app/` kod, `data/` kayıtlar, `venv/` Python). Finder'da **Git → Klasöre Git…** ile açabilirsin.
+  Belgeler/Masaüstü iCloud ile senkronize ediliyorsa macOS oradaki dosyaları buluta alıp Mac'ten
+  silebiliyor; arka planda çalışan program bu yüzden iCloud dışında durur.
 
 ## Ayarlar
 
@@ -163,4 +171,5 @@ hakkından bir miktar yer; sonraki taramalar çok küçük. Hakkın çabuk doluy
 
 ## Kaldırma
 
-`bash uninstall.sh` otomatik çalıştırmayı kapatır. Kayıtlar `data/` klasöründe durur.
+`bash uninstall.sh` otomatik çalıştırmayı kapatır. Kayıtlar silinmez; tamamen kaldırmak için
+`~/Library/Application Support/Deadline Hatirlatici` klasörünü de sil.

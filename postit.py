@@ -2,6 +2,7 @@
 """Masaüstü post-it: data/deadlines.json'daki yaklaşan deadline'ları gösterir."""
 import datetime as dt
 import json
+import os
 import subprocess
 import sys
 import tkinter as tk
@@ -10,7 +11,10 @@ from pathlib import Path
 import sites
 
 BASE = Path(__file__).resolve().parent
-DATA = BASE / "data"
+# Kayıtlar iCloud'un dokunmadığı yerde: Belgeler/Masaüstü iCloud'daysa macOS dosyaları buluta alıp
+# Mac'ten silebiliyor ve arka plandaki tarama onları okuyamıyor.
+DATA = Path(os.environ.get("DEADLINE_DATA") or
+            Path.home() / "Library/Application Support/Deadline Hatirlatici/data")
 OUT_FILE = DATA / "deadlines.json"
 DONE_FILE = DATA / "done.json"
 WIN_FILE = DATA / "window.json"
