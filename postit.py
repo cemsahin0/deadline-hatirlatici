@@ -215,6 +215,9 @@ class PostIt:
         self.menu.add_command(label="Dosya ekle (PDF, Word)…", command=self.add_file)
         self.menu.add_command(label="Siteleri, dosyaları, notları yönet…", command=self.manage_sites)
         self.menu.add_command(label="Hangi mailler okunsun? (gizlilik)…", command=self.privacy_settings)
+        self.calendar_on = tk.BooleanVar(value=bool(read_json(SETTINGS_FILE, {}).get("calendar")))
+        self.menu.add_checkbutton(label="📅 Mac Takvimine ekle", variable=self.calendar_on,
+                                  command=self.toggle_calendar)
         self.menu.add_separator()
         self.menu.add_command(label="Bitti işaretlenenleri geri getir", command=self.restore_done)
         self.menu.add_separator()
@@ -316,11 +319,13 @@ class PostIt:
         self.done.discard(item_key(d))
         DONE_FILE.write_text(json.dumps(sorted(self.done), ensure_ascii=False))
         self.render(force=True)
+        self.sync_calendar_soon()
 
     def restore_done(self):
         self.done.clear()
         DONE_FILE.write_text("[]")
         self.render(force=True)
+        self.sync_calendar_soon()
 
     def update_title(self):
         n = getattr(self, "count", 0)
@@ -447,11 +452,30 @@ class PostIt:
                        "source": "🔒 kendi notun", "status": "active", "mail_id": f"manual:{uuid.uuid4().hex[:8]}"})
         MANUAL_FILE.write_text(json.dumps(manual, ensure_ascii=False, indent=1))
         self.render(force=True)
+        self.sync_calendar_soon()
 
     def remove_manual(self, ids):
         manual = [m for m in read_json(MANUAL_FILE, []) if m["mail_id"] not in ids]
         MANUAL_FILE.write_text(json.dumps(manual, ensure_ascii=False, indent=1))
         self.render(force=True)
+        self.sync_calendar_soon()
+
+    def toggle_calendar(self):
+        settings = read_json(SETTINGS_FILE, {})
+        settings["calendar"] = bool(self.calendar_on.get())
+        SETTINGS_FILE.write_text(json.dumps(settings, ensure_ascii=False, indent=1))
+        if settings["calendar"]:
+            self.footer.config(text="Takvime ekleniyor… (macOS izin sorarsa İzin Ver)")
+            self.sync_calendar_soon()
+        else:
+            self.osa('display dialog "Takvime ekleme kapatıldı. Eklenmiş etkinlikler yerinde kalır; '
+                     'istersen Takvim uygulamasında \"Deadline\'lar\" takvimini sağ tık → Sil ile kaldırabilirsin." '
+                     'with title "Takvim" buttons {"Tamam"} default button "Tamam"')
+
+    def sync_calendar_soon(self):
+        """Bitti / geri al / kendi notu gibi değişikliklerden sonra takvimi güncelle (açıksa)."""
+        if read_json(SETTINGS_FILE, {}).get("calendar"):
+            self.run_scanner("--rebuild")
 
     def privacy_settings(self):
         """Claude'a sadece hangi göndericilerin maillerinin gideceğini ayarla."""
@@ -538,6 +562,7 @@ class PostIt:
         self.done.add(item_key(d))
         DONE_FILE.write_text(json.dumps(sorted(self.done), ensure_ascii=False))
         self.render(force=True)
+        self.sync_calendar_soon()
 
     def open_mail(self, d):
         mid = d.get("mail_id")

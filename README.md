@@ -67,7 +67,7 @@ Mac her açıldığında kendiliğinden gelir; kayıtlar `data/` klasöründe sa
 | **🔗** | ders sitesi ekle (bkz. Ders siteleri) |
 | **📎** | PDF / Word dosyası ekle (bkz. PDF ve Word dosyaları) |
 | **⟳** | mailleri hemen tarar (normalde açılışta ve her 10 dakikada bir) |
-| **Sağ tık** | menü: kendim ekle (gizli), şimdi tara, site/dosya ekle, yönet, gizlilik ayarı, bitti işaretlenenleri geri getir, kapat |
+| **Sağ tık** | menü: kendim ekle (gizli), şimdi tara, site/dosya ekle, yönet, gizlilik ayarı, takvime ekle, bitti işaretlenenleri geri getir, kapat |
 
 ## PDF ve Word dosyaları
 
@@ -83,6 +83,20 @@ Okunabilenler: **PDF, Word (.docx, .doc), .rtf, .odt, .txt**. Taranmış (fotoğ
 olmadığı için okunamaz; bildirim bunu söyler. İlk seferde macOS "İndirilenler klasörüne erişim"
 izni sorarsa **İzin Ver** de. Dosyadan gelen bir deadline'a çift tıklarsan dosya açılır.
 Ders sitesinde bir PDF linki varsa onu da 🔗 ile site gibi ekleyebilirsin.
+
+## Mac Takvimi
+
+Post-it'e sağ tık → **📅 Mac Takvimine ekle** işaretlersen deadline'lar Takvim uygulamasında ayrı bir
+**"Deadline'lar"** takvimine eklenir (iCloud takvimin varsa iPhone'unda da görünür).
+
+- Saatli deadline: o saatte biten etkinlik, **1 gün ve 2 saat önce** uyarı. Saatsiz: tüm gün
+  etkinlik, **bir önceki gün 09:00**'da uyarı.
+- Sadece post-it'teki 30 gün değil, bilinen **tüm gelecek** deadline'lar eklenir.
+- Hoca tarihi uzatırsa etkinlik de taşınır; iptal edilen, birleştirilen ya da ✓ ile bitirdiğin iş
+  takvimden silinir. Geçmiş etkinliklere dokunulmaz.
+- Takvim'e sadece değişiklik olduğunda yazılır. İlk seferde macOS "Takvim'i kontrol etme" izni
+  sorarsa **İzin Ver** de.
+- Kapatırsan eklenmiş etkinlikler kalır; istersen Takvim'de "Deadline'lar"a sağ tık → **Sil**.
 
 ## Ders siteleri
 

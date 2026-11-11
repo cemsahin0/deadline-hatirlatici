@@ -19,6 +19,7 @@ from pathlib import Path
 
 import shutil
 
+import calendar_sync
 import docs
 import sites
 
@@ -356,6 +357,33 @@ def import_files(paths, state):
     return found_any
 
 
+def sync_calendar(state):
+    """Ayarlarda açıksa: gelecekteki tüm aktif deadline'ları (bitirilenler hariç) Takvim'e yaz."""
+    try:
+        settings = json.loads(SETTINGS_FILE.read_text())
+    except Exception:
+        settings = {}
+    if not settings.get("calendar"):
+        return
+    def read(path, default):
+        try:
+            return json.loads(path.read_text())
+        except Exception:
+            return default
+    done = set(read(DATA / "done.json", []))
+    dropped = set(state.get("dropped", []))
+    today = dt.date.today().isoformat()
+    items = []
+    for d in all_deadlines(state) + read(DATA / "manual.json", []):
+        key = f"{d['title'].strip().lower()}|{d['deadline_date']}"
+        if d["deadline_date"] >= today and key not in dropped and key not in done:
+            items.append(d)
+    try:
+        calendar_sync.sync(items, DATA / "calendar.json", log)
+    except Exception as e:
+        log(f"Takvime yazılamadı: {e}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rebuild", action="store_true", help="Mail okumadan sadece listeyi yenile")
@@ -381,16 +409,19 @@ def main():
             merge_duplicates(state)
             save_state(state)
         write_output(state)
+        sync_calendar(state)
         return
     if args.remove_file:
         for f in args.remove_file:
             state["processed"].pop(f"file:{Path(f).expanduser().resolve()}", None)
         save_state(state)
         write_output(state)
+        sync_calendar(state)
         log(f"{len(args.remove_file)} dosya listeden çıkarıldı.")
         return
     if args.rebuild:
         log(f"{len(write_output(state))} deadline yazıldı.")
+        sync_calendar(state)
         return
 
     # İzin listesi genişletildiyse, daha önce gizli diye atlanan mailler tekrar değerlendirilsin
@@ -446,6 +477,7 @@ def main():
         merge_duplicates(state)
         save_state(state)
     items = write_output(state)
+    sync_calendar(state)
     log(f"Bitti. Önümüzdeki {WINDOW_DAYS} günde {len(items)} deadline var.")
 
 
