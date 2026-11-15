@@ -378,6 +378,9 @@ def sync_calendar(state):
     today = dt.date.today().isoformat()
     items = []
     for d in all_deadlines(state) + read(DATA / "manual.json", []):
+        if d.get("repeat"):   # haftalık kendi notun: takvimde tekrarlanan etkinlik olarak hep dursun
+            items.append(d)
+            continue
         key = f"{d['title'].strip().lower()}|{d['deadline_date']}"
         if d["deadline_date"] >= today and key not in dropped and key not in done:
             items.append(d)

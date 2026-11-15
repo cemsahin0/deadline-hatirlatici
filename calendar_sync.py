@@ -32,7 +32,8 @@ function run(argv) {
       const old = recreated ? null : find(ev.uid);
       if (old) C.delete(old);
       const e = C.make({new: 'event', at: cal, withProperties: {summary: ev.summary,
-        startDate: new Date(ev.start), endDate: new Date(ev.end), alldayEvent: ev.allday, description: ev.notes}});
+        startDate: new Date(ev.start), endDate: new Date(ev.end), alldayEvent: ev.allday, description: ev.notes,
+        recurrence: ev.recurrence || ''}});
       for (const m of ev.alarms) e.displayAlarms.push(C.DisplayAlarm({triggerInterval: m}));
       out.uids[ev.key] = e.uid();
     } catch (x) { out.errors.push(ev.summary + ': ' + String(x)); }
@@ -43,6 +44,14 @@ function run(argv) {
 
 
 def _event_for(d):
+    ev = _base_event(d)
+    if d.get("repeat") == "weekly":
+        ev["recurrence"] = "FREQ=WEEKLY;INTERVAL=1"
+        ev["summary"] = "🔁 " + d["title"]
+    return ev
+
+
+def _base_event(d):
     day = dt.date.fromisoformat(d["deadline_date"])
     t = d.get("deadline_time") or ""
     notes = f"Kaynak: {d.get('source', '')}\nDeadline Hatırlatıcı tarafından eklendi."
@@ -75,7 +84,8 @@ def sync(items, map_file, log, cal_name=CAL_NAME):
     for d in items:
         key = d["title"].strip().lower()
         ev = _event_for(d)
-        want[key] = {**ev, "key": key, "date": d["deadline_date"]}
+        # Tekrarlanan etkinlik hiç "geçmiş" sayılmasın ki silinince takvimden de kalksın
+        want[key] = {**ev, "key": key, "date": "9999-12-31" if d.get("repeat") else d["deadline_date"]}
 
     upsert, remove = [], []
     for key, ev in want.items():

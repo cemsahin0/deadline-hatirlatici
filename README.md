@@ -142,6 +142,10 @@ sonunda aynı işin tekrar eden kayıtları da ayıklanır.
   (`25.11`, `25.11.2026 23:59`, `25 Kasım 14:00`, `yarın`). Bu not sadece bu Mac'te
   (kayıt klasöründe `manual.json`) durur, Claude dahil hiçbir yere gönderilmez; post-it'te diğerleri gibi görünür.
   Çift tıklayınca silebilirsin.
+- **Her hafta tekrar eden bir iş mi?** (haftalık ödev, lab raporu…) "Kendim ekle"nin son adımında
+  **Her hafta tekrarla** de. Bir kere eklersin; ✓ ile bitirince bir sonraki haftaya geçer, bitirmeden
+  tarihi geçerse de sıradaki hafta gelir. Takvimde 🔁 ile haftalık tekrarlanan etkinlik olarak durur.
+  Kaldırmak için çift tıkla → **Sil** (bütün tekrarlar silinir).
 - **GitHub'a giden:** sadece kod. kayıt klasörü (mail başlıkları, deadline'lar, eklediğin
   siteler/dosyalar) asla gönderilmez.
 - **iCloud:** Kayıtlar iCloud'a gitmez; Belgeler klasörün iCloud'da olsa bile kayıt klasörü

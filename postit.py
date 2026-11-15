@@ -234,6 +234,21 @@ def parse_tr_date(text, today=None):
     return day.isoformat(), tm
 
 
+def current_occurrence(m, today=None):
+    """Haftalık tekrar eden kendi notun için sıradaki tarih: bugünden itibaren, en son ✓ ile
+    bitirdiğin haftadan sonraki ilk hafta. Tekrarsız notlar olduğu gibi döner."""
+    if m.get("repeat") != "weekly":
+        return m
+    today = today or dt.date.today()
+    d = dt.date.fromisoformat(m["deadline_date"])
+    if d < today:
+        d += dt.timedelta(weeks=-(-(today - d).days // 7))
+    done_until = m.get("done_until", "")
+    while d.isoformat() <= done_until:
+        d += dt.timedelta(weeks=1)
+    return {**m, "deadline_date": d.isoformat(), "source": "🔁 her hafta · 🔒 kendi notun"}
+
+
 def item_key(d):
     return f"{d['title'].strip().lower()}|{d['deadline_date']}"
 
@@ -549,10 +564,20 @@ class PostIt:
             if parsed:
                 break
             prompt = f"\"{when}\" tarihini anlayamadım. Gün.Ay şeklinde yaz:\n\nÖrnekler:  25.11   ·   25.11.2026 23:59"
+        day_name = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"][
+            dt.date.fromisoformat(parsed[0]).weekday()]
+        ok, rep = self.osa('display dialog (item 1 of argv) with title "🔒 Kendim ekle" '
+                           'buttons {"Tek sefer", "Her hafta tekrarla"} default button "Tek sefer"',
+                           "return button returned of result",
+                           args=[f"Bu iş tekrar ediyor mu?\n\n\"Her hafta tekrarla\" dersen her {day_name} "
+                                 f"yeniden gelir; ✓ ile bitirince bir sonraki haftaya geçer."])
         import uuid
         manual = read_json(MANUAL_FILE, [])
-        manual.append({"title": title, "deadline_date": parsed[0], "deadline_time": parsed[1],
-                       "source": "🔒 kendi notun", "status": "active", "mail_id": f"manual:{uuid.uuid4().hex[:8]}"})
+        note = {"title": title, "deadline_date": parsed[0], "deadline_time": parsed[1],
+                "source": "🔒 kendi notun", "status": "active", "mail_id": f"manual:{uuid.uuid4().hex[:8]}"}
+        if rep == "Her hafta tekrarla":
+            note["repeat"] = "weekly"
+        manual.append(note)
         MANUAL_FILE.write_text(json.dumps(manual, ensure_ascii=False, indent=1))
         self.render(force=True)
         self.sync_calendar_soon()
@@ -630,7 +655,11 @@ class PostIt:
             p = Path(f)
             labels[f"📄 {p.name}   ({p.parent.name})"] = ("file", f)
         for m in read_json(MANUAL_FILE, []):
-            labels[f"🔒 {m['title']}   ({m['deadline_date']})"] = ("manual", m["mail_id"])
+            if m.get("repeat") == "weekly":
+                wd = TR_DAYS[dt.date.fromisoformat(m["deadline_date"]).weekday()]
+                labels[f"🔁 {m['title']}   (her hafta {wd})"] = ("manual", m["mail_id"])
+            else:
+                labels[f"🔒 {m['title']}   ({m['deadline_date']})"] = ("manual", m["mail_id"])
         if not labels:
             ok, out = self.osa('display dialog "Henüz ders sitesi, dosya ya da not eklemedin." '
                                'with title "Siteler, dosyalar, notlar" '
@@ -662,6 +691,17 @@ class PostIt:
             self.run_scanner("--remove-file", *rm_files)
 
     def mark_done(self, d):
+        if d.get("repeat") == "weekly":   # haftalık iş: bu haftayı bitti say, sıradaki haftaya geç
+            manual = read_json(MANUAL_FILE, [])
+            for m in manual:
+                if m["mail_id"] == d["mail_id"]:
+                    m["done_until"] = d["deadline_date"]
+                    nxt = current_occurrence(m)["deadline_date"]
+            MANUAL_FILE.write_text(json.dumps(manual, ensure_ascii=False, indent=1))
+            self.render(force=True)
+            day = dt.date.fromisoformat(nxt)
+            self.footer.config(text=f"✓ Bu hafta tamam · sıradaki: {day.day} {TR_MONTHS[day.month - 1]}")
+            return
         self.done.add(item_key(d))
         DONE_FILE.write_text(json.dumps(sorted(self.done), ensure_ascii=False))
         self.render(force=True)
@@ -727,7 +767,8 @@ class PostIt:
 
         items, finished = [], []
         limit = today + dt.timedelta(days=WINDOW_DAYS)
-        all_items = data.get("items", []) + [m for m in manual if m["deadline_date"] <= limit.isoformat()]
+        manual_now = [current_occurrence(m, today) for m in manual]
+        all_items = data.get("items", []) + [m for m in manual_now if m["deadline_date"] <= limit.isoformat()]
         all_items.sort(key=lambda d: (d["deadline_date"], d.get("deadline_time") or "99:99"))
         for d in all_items:
             day = dt.date.fromisoformat(d["deadline_date"])
