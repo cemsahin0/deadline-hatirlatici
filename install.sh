@@ -1,7 +1,7 @@
 #!/bin/bash
 # Deadline Hatırlatıcı kurulumu (her Mac'te çalışır, tekrar çalıştırmak güvenlidir):
 #  - Python ortamını hazırlar
-#  - Claude Code aracını ve girişini kontrol eder
+#  - Claude Code ya da Codex aracını ve girişini kontrol eder
 #  - Mac açılınca post-it'i açan ve mailleri her 10 dakikada bir tarayan servisleri kurar
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"   # bu klasör: kodun ana kopyası (GitHub reposu)
@@ -54,22 +54,52 @@ fi
 rm -rf "$DIR/.venv"   # eski sürümlerin proje klasörüne kurduğu ortam
 "$PY" -m pip install -q --disable-pip-version-check pyobjc-framework-Cocoa pyobjc-framework-Quartz certifi
 
-# ---- 2. Claude Code ------------------------------------------------------------
-CLAUDE="$(cd "$CODE" && "$PY" -c 'import deadline_reminder as d; print(d.CLAUDE)')"
-if ! "$CLAUDE" --version >/dev/null 2>&1; then
-  fail "Claude Code bulunamadı. Terminal'de şunu çalıştır, bitince bu komutu tekrar çalıştır:
-  curl -fsSL https://claude.ai/install.sh | bash"
-fi
-if ! "$CLAUDE" -p --help 2>/dev/null | grep -q -- "--effort"; then
-  fail "Claude Code sürümün eski ($("$CLAUDE" --version)). Güncelle:  $CLAUDE update"
-fi
-if ! (cd "$DATA" && echo "sadece OK yaz" | "$CLAUDE" -p --model haiku --tools "" \
-       --no-session-persistence --setting-sources "" --strict-mcp-config >/dev/null 2>&1); then
-  fail "Claude hesabına giriş yapılmamış. Terminal'de şunu çalıştır, tarayıcıda izin ver,
+# ---- 2. Yapay zekâ aracı: Claude Code ya da Codex -----------------------------
+# Hangisi kurulu ve giriş yapılmışsa o kullanılır (ikisi de varsa Claude).
+TOOLS="$(cd "$CODE" && "$PY" -c 'import deadline_reminder as d; print(d.CLAUDE); print(d.CODEX)')"
+CLAUDE="$(echo "$TOOLS" | sed -n 1p)"
+CODEX="$(echo "$TOOLS" | sed -n 2p)"
+ENGINE=""; WHY=""
+if "$CLAUDE" --version >/dev/null 2>&1; then
+  if ! "$CLAUDE" -p --help 2>/dev/null | grep -q -- "--effort"; then
+    WHY="Claude Code sürümün eski ($("$CLAUDE" --version)). Güncelle:  $CLAUDE update"
+  elif (cd "$DATA" && echo "sadece OK yaz" | "$CLAUDE" -p --model haiku --tools "" \
+          --no-session-persistence --setting-sources "" --strict-mcp-config >/dev/null 2>&1); then
+    ENGINE=claude
+  else
+    WHY="Claude hesabına giriş yapılmamış. Terminal'de şunu çalıştır, tarayıcıda izin ver,
 sonra bu komutu tekrar çalıştır:
   $CLAUDE auth login"
+  fi
 fi
-say "Claude Code hazır: $("$CLAUDE" --version)"
+if [ -z "$ENGINE" ] && PATH="$(dirname "$CODEX"):$PATH" "$CODEX" --version >/dev/null 2>&1; then
+  if PATH="$(dirname "$CODEX"):$PATH" "$CODEX" login status >/dev/null 2>&1; then
+    ENGINE=codex
+  else
+    WHY="Codex'e giriş yapılmamış. Terminal'de şunu çalıştır, tarayıcıda ChatGPT hesabınla izin ver,
+sonra bu komutu tekrar çalıştır:
+  codex login"
+  fi
+fi
+if [ -z "$ENGINE" ]; then
+  [ -n "$WHY" ] && fail "$WHY"
+  fail "Ne Claude Code ne Codex bulundu. Hangi aboneliğin varsa onu kur, sonra bu komutu tekrar çalıştır:
+  Claude aboneliği:   curl -fsSL https://claude.ai/install.sh | bash   ve sonra   claude auth login
+  ChatGPT aboneliği:  brew install --cask codex   (ya da: npm install -g @openai/codex)   ve sonra   codex login"
+fi
+"$PY" - "$DATA/settings.json" "$ENGINE" <<'PYEOF'
+import json, sys
+from pathlib import Path
+f = Path(sys.argv[1])
+try:
+    s = json.loads(f.read_text())
+except Exception:
+    s = {}
+s["engine"] = sys.argv[2]
+f.write_text(json.dumps(s, ensure_ascii=False, indent=1))
+PYEOF
+if [ "$ENGINE" = claude ]; then say "Claude Code hazır: $("$CLAUDE" --version)"
+else say "Codex hazır: $(PATH="$(dirname "$CODEX"):$PATH" "$CODEX" --version)"; fi
 
 # ---- 3. Otomatik başlatma servisleri ------------------------------------------
 LOG="$HOME/Library/Logs/deadline-hatirlatici.log"
@@ -101,6 +131,7 @@ write_plist "com.deadline-hatirlatici.postit" "postit.py" \
   "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>"
 
 say "Kuruldu! Post-it masaüstünde açılıyor, ilk tarama arka planda başladı."
-echo "macOS izin sorarsa (Belgeler klasörü, Mail) → İzin Ver."
+echo "macOS izin sorarsa (Belgeler klasörü, Mail, Takvim) → İzin Ver."
+echo "Post-it ilk açılışta hangi maillerin okunacağını soracak (ör. @sabanciuniv.edu)."
 echo "Kayıtlar: $DATA"
 echo "İlerleme:  tail -f \"$DATA/reminder.log\""

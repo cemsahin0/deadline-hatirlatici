@@ -118,10 +118,24 @@ def _claude_dirs():
 ENV = {**os.environ, "PATH": ":".join(_claude_dirs() + [os.environ.get("PATH", "/usr/bin:/bin")])}
 ENV.pop("ANTHROPIC_API_KEY", None)  # Claude hesabıyla girişi kullan
 CLAUDE = shutil.which("claude", path=ENV["PATH"]) or "claude"
+CODEX = shutil.which("codex", path=ENV["PATH"]) or "codex"
+
+
+def engine():
+    """Hangi yapay zekâ aracı kullanılacak: install.sh ayara yazar; yoksa kurulu olana bakılır."""
+    try:
+        e = json.loads(SETTINGS_FILE.read_text()).get("engine")
+    except Exception:
+        e = None
+    if e in ("claude", "codex"):
+        return e
+    if not shutil.which("claude", path=ENV["PATH"]) and shutil.which("codex", path=ENV["PATH"]):
+        return "codex"
+    return "claude"
 
 
 class ClaudeNotLoggedIn(Exception):
-    pass
+    """Yapay zekâ aracına (Claude Code ya da Codex) giriş yapılmamış."""
 
 
 def ask_claude(system, text, schema, effort="low"):
@@ -145,6 +159,54 @@ def ask_claude(system, text, schema, effort="low"):
     if data is None:
         data = json.loads(res["result"])
     return data
+
+
+CODEX_RULES = ("\n\nÖNEMLİ: Hiçbir komut çalıştırma, dosya okuma ya da yazma. Sadece aşağıdaki metne bakarak "
+               "cevap ver. Cevabın SADECE şu JSON şemasına uyan tek bir JSON nesnesi olsun, başka hiçbir "
+               "şey yazma:\n")
+
+
+def ask_codex(system, text, schema, effort="low"):
+    """codex komut aracıyla (ChatGPT hesabı üzerinden) JSON yanıt al."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        schema_file, out_file = Path(tmp) / "schema.json", Path(tmp) / "cevap.txt"
+        schema_file.write_text(json.dumps(schema))
+        work = Path(tmp) / "bos"
+        work.mkdir()
+        prompt = system + CODEX_RULES + json.dumps(schema, ensure_ascii=False) + "\n\n---\n\n" + text
+        optional = ["--output-schema", str(schema_file), "--ephemeral", "--color", "never",
+                    "-c", f'model_reasoning_effort="{effort}"']
+        base = [CODEX, "exec", "--skip-git-repo-check", "--sandbox", "read-only", "-o", str(out_file)]
+        for extra in (optional, []):   # eski Codex sürümleri bu seçenekleri tanımıyorsa onlarsız dene
+            out = subprocess.run(base + extra + ["-"], input=prompt, capture_output=True, text=True,
+                                 env=ENV, cwd=work, timeout=900)
+            if out.returncode == 0 or "unexpected argument" not in out.stderr:
+                break
+        err = (out.stderr + out.stdout).lower()
+        if out.returncode != 0:
+            if any(w in err for w in ("not logged in", "login", "unauthorized", "401", "auth")):
+                raise ClaudeNotLoggedIn(out.stderr[-300:])
+            raise RuntimeError(f"Codex hatası: {out.stderr.strip()[-300:]}")
+        answer = out_file.read_text() if out_file.exists() else out.stdout
+    start, end = answer.find("{"), answer.rfind("}")
+    if start < 0 or end < start:
+        raise RuntimeError(f"Codex beklenmeyen cevap verdi: {answer[:300]}")
+    return json.loads(answer[start:end + 1])
+
+
+def ask_ai(system, text, schema, effort="low"):
+    if engine() == "codex":
+        return ask_codex(system, text, schema, effort)
+    return ask_claude(system, text, schema, effort)
+
+
+def mail_choice_made():
+    """Kullanıcı hangi maillerin okunacağını seçti mi? (Seçmeden hiçbir mail gönderilmez.)"""
+    try:
+        return "allowed_senders" in json.loads(SETTINGS_FILE.read_text())
+    except Exception:
+        return False
 
 
 def load_state():
@@ -230,7 +292,7 @@ def extract_deadlines(mails, state):
             f"\n<mail id=\"{m['id']}\">\nKimden: {m['sender']}\nTarih: {m['date']}\n"
             f"Konu: {m['subject']}\n\n{m['content']}\n</mail>"
         )
-    found = ask_claude(SYSTEM, "\n".join(parts), SCHEMA, "low")["deadlines"]
+    found = ask_ai(SYSTEM, "\n".join(parts), SCHEMA, "low")["deadlines"]
     valid = []
     for d in found:
         try:
@@ -291,7 +353,7 @@ def merge_duplicates(state):
              f"görülme tarihi: {d['mail_date'][:16]}"
              for i, d in enumerate(items)]
     try:
-        result = ask_claude(MERGE_SYSTEM, "\n".join(lines), MERGE_SCHEMA, "medium")
+        result = ask_ai(MERGE_SYSTEM, "\n".join(lines), MERGE_SCHEMA, "medium")
     except RuntimeError as e:
         log(f"Birleştirme adımı atlandı: {e}")
         return
@@ -436,7 +498,10 @@ def main():
         del state["processed"][k]
 
     found_any = False
-    while True:
+    chosen = mail_choice_made()
+    if not chosen:
+        log("Hangi maillerin okunacağı henüz seçilmedi; mailler taranmıyor (post-it soruyor).")
+    while chosen:
         res = fetch_new_mails(state["processed"].keys(), BATCH_SIZE)
         mails = [m for m in res["messages"] if not m.get("skipped")]
         skipped = [m for m in res["messages"] if m.get("skipped")]
@@ -491,5 +556,8 @@ if __name__ == "__main__":
     try:
         main()
     except ClaudeNotLoggedIn:
-        log("HATA: Claude girişi yok. Terminalde 'claude auth login' çalıştır.")
+        if engine() == "codex":
+            log("HATA: Codex girişi yok. Terminalde 'codex login' çalıştır.")
+        else:
+            log("HATA: Claude girişi yok. Terminalde 'claude auth login' çalıştır.")
         sys.exit(1)

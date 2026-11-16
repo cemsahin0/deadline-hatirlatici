@@ -1,34 +1,64 @@
 # 📌 Deadline Hatırlatıcı
 
-Apple Mail'deki son ~4 ayın maillerini okur, içlerindeki son tarihleri Claude ile bulur
-ve **30 gün ya da daha az kalanları** masaüstünde sarı bir post-it'te gösterir.
+Apple Mail'deki son ~4 ayın maillerini okur, içlerindeki son tarihleri yapay zekâyla
+(**Claude** ya da **ChatGPT/Codex**, hangisi varsa) bulur ve **30 gün ya da daha az kalanları**
+masaüstünde sarı bir post-it'te gösterir.
 
-## Kurulum (her Mac için)
+## Kurulum (her Mac için, ~10 dakika)
 
-**Gerekenler:** Mail uygulamasında kurulu bir mail hesabı ve bir Claude aboneliği.
+**Gerekenler:**
+- Bir **Mac**
+- Okul mailinin **Mail** uygulamasında ekli olması (Sistem Ayarları → İnternet Hesapları)
+- **Claude** (Pro/Max) ya da **ChatGPT** (Plus/Pro) aboneliğinden biri
 
-1. **Claude Code'u kur ve giriş yap** (zaten varsa bu adımı geç). Terminal'i aç:
-   ```bash
-   curl -fsSL https://claude.ai/install.sh | bash
-   ```
-   ```bash
-   claude auth login
-   ```
-   Açılan tarayıcıda kendi Claude hesabınla izin ver. Ayrı ücret yok, aboneliğinin kullanım hakkından gider.
+Aşağıdaki komutları **Terminal**'e yapıştırıp Enter'a basacaksın. Terminal'i açmak için
+**Cmd + Boşluk** → `Terminal` yaz → Enter.
 
-2. **İndir ve kur:**
-   ```bash
-   git clone https://github.com/cemsahin0/deadline-hatirlatici.git ~/Documents/deadline-hatirlatici && bash ~/Documents/deadline-hatirlatici/install.sh
-   ```
-   (git sorarsa GitHub'a giriş yap. Alternatif: GitHub sayfasında **Code → Download ZIP**,
-   klasörü Belgeler'e taşı, Terminal'de `bash ~/Documents/deadline-hatirlatici-main/install.sh`.)
+### 1. Yapay zekâ aracını kur (hangi aboneliğin varsa sadece onu yap)
 
-3. macOS "Python, Belgeler klasörüne / Mail'e erişmek istiyor" diye sorarsa → **İzin Ver**.
+**A) Claude aboneliğin varsa:**
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+```bash
+claude auth login
+```
 
-`install.sh` eksik bir şey varsa (Python, Claude Code, giriş) ne yapman gerektiğini söyler;
-düzeltip tekrar çalıştırman yeterli.
+**B) ChatGPT aboneliğin varsa (Codex):**
+```bash
+brew install --cask codex
+```
+(`brew` yoksa: önce [nodejs.org](https://nodejs.org)'dan Node.js'i kur, sonra `npm install -g @openai/codex`)
+```bash
+codex login
+```
 
-İlk tarama mail sayısına göre 1-1,5 saat sürer, çünkü Mail her mailin içeriğini yavaş veriyor.
+Giriş komutu tarayıcıyı açar; kendi hesabınla giriş yapıp izin ver. Ayrı ücret yok,
+aboneliğinin kullanım hakkından gider. İkisi de kuruluysa Claude kullanılır.
+
+### 2. Python'u kur
+
+[python.org/downloads](https://www.python.org/downloads/) → sarı **Download Python** düğmesi → inen
+dosyayı açıp kur. (Mac'teki hazır Python post-it için yetmiyor. Zaten kurduysan geç.)
+
+### 3. İndir ve kur
+
+```bash
+git clone https://github.com/cemsahin0/deadline-hatirlatici.git ~/Documents/deadline-hatirlatici && bash ~/Documents/deadline-hatirlatici/install.sh
+```
+Mac "geliştirici araçlarını yükle" diye sorarsa **Yükle** de, bitince komutu tekrar yapıştır.
+
+`install.sh` eksik bir şey varsa (Python, Claude/Codex, giriş) ne yapman gerektiğini yazıp durur;
+söyleneni yapıp aynı komutu tekrar çalıştırman yeterli. Sonunda **"Kuruldu!"** yazar.
+
+### 4. İzinler ve ilk ayar
+
+- macOS "Mail'i / Takvim'i / Belgeler klasörünü kontrol etmek istiyor" diye sorarsa → **İzin Ver**.
+- Masaüstüne sarı post-it gelir ve **hangi maillerin okunacağını** sorar. Okulunun mail uzantısını yaz:
+  `@sabanciuniv.edu` (birden fazlaysa virgülle: `@sabanciuniv.edu, hoca.adi@gmail.com`).
+  **Bunu seçmeden hiçbir mail okunmaz.**
+
+İlk tarama mail sayısına göre 30 dk – 1,5 saat sürer, çünkü Mail her mailin içeriğini yavaş veriyor.
 Post-it bu sırada kademeli olarak dolar. Sonraki taramalar sadece yeni mailleri okur.
 
 ## Güncelleme
@@ -41,15 +71,13 @@ Kayıtlar (bulunan deadline'lar, tamamlananlar, post-it'in yeri ve boyutu) korun
 
 ## Arkadaşınla paylaşma
 
-Repo private olduğu için arkadaşın önce eklenmeli:
-1. GitHub'da repo sayfası → **Settings → Collaborators → Add people** → arkadaşının GitHub kullanıcı adı.
-2. Arkadaşın gelen daveti kabul eder.
-3. Yukarıdaki **Kurulum** adımlarını kendi Mac'inde uygular.
+Repo linkini göndermen yeterli: https://github.com/cemsahin0/deadline-hatirlatici
+Arkadaşın yukarıdaki **Kurulum** adımlarını kendi Mac'inde uygular.
 
-Her bilgisayar **kendi** mailini okur ve **kendi** Claude hesabını kullanır; kimsenin
-kullanım hakkı birbirinden gitmez. Herkesin deadline'ları kendi bilgisayarındaki kayıt klasöründe durur,
-repoya hiç gönderilmez (`.gitignore`), yani kimse başkasının maillerini görmez.
-
+Her bilgisayar **kendi** mailini okur ve **kendi** Claude/ChatGPT hesabını kullanır; kimsenin
+kullanım hakkı birbirinden gitmez. Herkesin deadline'ları, ayarları, eklediği siteler ve notlar kendi
+bilgisayarındaki kayıt klasöründe durur, repoya hiç gönderilmez (`.gitignore`), yani kimse
+başkasının maillerini görmez.
 
 ## Kullanım
 
@@ -128,19 +156,20 @@ sonunda aynı işin tekrar eden kayıtları da ayıklanır.
 
 - **Program senin Mac'inde çalışır.** Mailleri okuma, tarihe göre süzme, post-it'i çizme, siteleri
   kontrol etme gibi işleri bu klasördeki kod yapar. Başka bir sunucu yok.
-- **Claude'a giden kısım:** Bir mailin, sitenin ya da dosyanın *içinde deadline olup olmadığını
-  anlamak* ve aynı işin tekrarlarını birleştirmek için o metin, **senin Claude hesabın üzerinden
-  Anthropic'e** (Claude'u yapan şirket) gönderilir. Bu, claude.ai'da bir mesaj yazmakla aynıdır;
-  hesabının gizlilik ayarları geçerlidir. Sohbetlerinin model eğitiminde kullanılmasını istemiyorsan
-  claude.ai → **Ayarlar → Gizlilik** kısmından kapatabilirsin.
+- **Yapay zekâya giden kısım:** Bir mailin, sitenin ya da dosyanın *içinde deadline olup olmadığını
+  anlamak* ve aynı işin tekrarlarını birleştirmek için o metin **senin hesabın üzerinden** gönderilir:
+  Claude kullanıyorsan **Anthropic'e**, Codex kullanıyorsan **OpenAI'a**. Bu, claude.ai'da ya da
+  ChatGPT'de bir mesaj yazmakla aynıdır; hesabının gizlilik ayarları geçerlidir. Model eğitiminde
+  kullanılmasını istemiyorsan claude.ai → **Ayarlar → Gizlilik** ya da ChatGPT → **Ayarlar → Veri
+  kontrolleri** kısmından kapatabilirsin.
 - Sadece **yeni** mailler gönderilir; bir kez işlenen mail tekrar gönderilmez.
 - **Hangi mailler gönderilsin?** Post-it'e sağ tık → **Hangi mailler okunsun? (gizlilik)…** ile
   izinli göndericileri yaz (örn. `@sabanciuniv.edu`). Listede olmayan maillerin konusu ve içeriği
   **hiç okunmaz**, hiçbir yere gönderilmez. Alt alan adları da sayılır (`sucourse.sabanciuniv.edu`).
-  Boş bırakırsan tüm mailler gönderilir.
+  Kurulumdan sonra post-it bunu ilk açılışta kendisi sorar; seçilene kadar hiçbir mail okunmaz.
 - **Gizli bir iş mi var?** Sağ tık → **🔒 Kendim ekle (gizli)…** → ne yapacağını ve tarihi yaz
   (`25.11`, `25.11.2026 23:59`, `25 Kasım 14:00`, `yarın`). Bu not sadece bu Mac'te
-  (kayıt klasöründe `manual.json`) durur, Claude dahil hiçbir yere gönderilmez; post-it'te diğerleri gibi görünür.
+  (kayıt klasöründe `manual.json`) durur, yapay zekâ dahil hiçbir yere gönderilmez; post-it'te diğerleri gibi görünür.
   Çift tıklayınca silebilirsin.
 - **Her hafta tekrar eden bir iş mi?** (haftalık ödev, lab raporu…) "Kendim ekle"nin son adımında
   **Her hafta tekrarla** de. Bir kere eklersin; ✓ ile bitirince bir sonraki haftaya geçer, bitirmeden
@@ -165,11 +194,11 @@ sonunda aynı işin tekrar eden kayıtları da ayıklanır.
 `deadline_reminder.py` dosyasının başında:
 - `LOOKBACK_DAYS = 120` — kaç günlük mail taransın
 - `WINDOW_DAYS = 30` — kaç gün kalanlar gösterilsin
-- `MODEL` — kullanılan Claude modeli
+- `MODEL` — kullanılan Claude modeli (Codex'te kendi ayarındaki model kullanılır)
 
 ## Kullanım hakkı
 
-Claude hesabın üzerinden çalışır, ayrı ödeme yok. İlk tarama (~800 mail, ~35 istek) kullanım
+Claude ya da ChatGPT hesabın üzerinden çalışır, ayrı ödeme yok. İlk tarama (~800 mail, ~35 istek) kullanım
 hakkından bir miktar yer; sonraki taramalar çok küçük. Hakkın çabuk doluyorsa
 `MODEL = "sonnet"` yapabilirsin.
 

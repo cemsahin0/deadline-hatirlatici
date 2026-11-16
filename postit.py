@@ -3,6 +3,7 @@
 import datetime as dt
 import json
 import os
+import re
 import subprocess
 import sys
 import tkinter as tk
@@ -352,6 +353,8 @@ class PostIt:
         self.root.after(300, pin_to_desktop)
         self.root.after(REFRESH_MS, self.tick)
         self.root.after(PIN_MS, self.keep_pinned)
+        if "allowed_senders" not in read_json(SETTINGS_FILE, {}):
+            self.root.after(1500, self.first_run_privacy)
 
     def make_draggable(self, w):
         w.bind("<ButtonPress-1>", self.drag_start, add="+")
@@ -547,7 +550,7 @@ class PostIt:
     def add_manual(self):
         """Gizli bir deadline'ı elle ekle. Sadece bu Mac'te (data/manual.json) durur, hiçbir yere gitmez."""
         ok, title = self.osa('display dialog "Ne yapman gerekiyor?\n(Bu not sadece bu Mac\'te durur, '
-                             'Claude dahil hiçbir yere gönderilmez.)" default answer "" '
+                             'yapay zekâ dahil hiçbir yere gönderilmez.)" default answer "" '
                              'with title "🔒 Kendim ekle" buttons {"Vazgeç", "Devam"} default button "Devam" '
                              'cancel button "Vazgeç"', "return text returned of result")
         title = title.strip()
@@ -608,7 +611,7 @@ class PostIt:
     def privacy_settings(self):
         """Claude'a sadece hangi göndericilerin maillerinin gideceğini ayarla."""
         current = ", ".join(read_json(SETTINGS_FILE, {}).get("allowed_senders", []))
-        msg = ("Sadece bu adreslerden gelen mailler Claude'a gönderilir; diğerlerinin içeriği hiç okunmaz.\n\n"
+        msg = ("Sadece bu adreslerden gelen mailler yapay zekâya gönderilir; diğerlerinin içeriği hiç okunmaz.\n\n"
                "Virgülle ayır. Örnek:  @sabanciuniv.edu, hoca@gmail.com\n"
                "Boş bırakırsan TÜM mailler gönderilir.")
         ok, out = self.osa('display dialog (item 1 of argv) default answer (item 2 of argv) '
@@ -617,11 +620,78 @@ class PostIt:
                            "return text returned of result", args=[msg, current])
         if not ok:
             return
-        pats = [p.strip() for p in out.replace(";", ",").split(",") if p.strip()]
+        pats, bad = self.parse_senders(out)
+        if bad:
+            self.osa('display dialog "Şunlar anlaşılmadı, kaydedilmedi: " & (item 1 of argv) & '
+                     '"\n\nÖrnek: @sabanciuniv.edu" with title "Hangi mailler okunsun?" buttons {"Tamam"}',
+                     args=[", ".join(bad)])
+            return
         settings = read_json(SETTINGS_FILE, {})
         settings["allowed_senders"] = pats
         SETTINGS_FILE.write_text(json.dumps(settings, ensure_ascii=False, indent=1))
         self.refresh_mail()  # liste genişlediyse atlanan mailler şimdi değerlendirilsin
+
+    FIRST_RUN_MSG = (
+        "Hangi adreslerden gelen mailler okunsun?\n\n"
+        "Sadece buraya yazdığın adreslerden gelen maillerin içeriği yapay zekâya gönderilir. "
+        "Diğer mailler (banka, kişisel, iş…) hiç okunmaz.\n\n"
+        "Okulunun mail uzantısını @ ile başlayarak yaz. Birden fazlaysa virgülle ayır.\n\n"
+        "Örnekler:\n"
+        "     @sabanciuniv.edu\n"
+        "     @metu.edu.tr, @boun.edu.tr\n"
+        "     @sabanciuniv.edu, hoca.adi@gmail.com\n\n"
+        "Sonradan değiştirmek için: post-it'e sağ tık → Hangi mailler okunsun?")
+
+    @staticmethod
+    def parse_senders(text):
+        """'sabanciuniv.edu, @itu.edu.tr' → (['@sabanciuniv.edu', '@itu.edu.tr'], anlaşılmayanlar)."""
+        good, bad = [], []
+        for p in re.split(r"[,;\s]+", text.strip().lower()):
+            if not p or p == "@":
+                continue
+            if "@" not in p:
+                p = "@" + p
+            (good if re.fullmatch(r"[^@\s]*@[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}", p) else bad).append(p)
+        return good, bad
+
+    def first_run_privacy(self):
+        """İlk açılış: hangi maillerin okunacağı seçilmeden hiçbir mail gönderilmez."""
+        if "allowed_senders" in read_json(SETTINGS_FILE, {}):
+            return
+        warn, typed = "", "@"
+        while True:
+            ok, out = self.osa(
+                'display dialog (item 1 of argv) default answer (item 2 of argv) '
+                'with title "Deadline Hatırlatıcı · Hangi mailler okunsun?" with icon note '
+                'buttons {"Tüm mailleri oku", "Kaydet"} default button "Kaydet"',
+                "return (button returned of result) & linefeed & (text returned of result)",
+                args=[warn + self.FIRST_RUN_MSG, typed])
+            if not ok:
+                return   # pencere kapandı: bir sonraki açılışta tekrar sorulur
+            button, _, typed = out.partition("\n")
+            if button == "Tüm mailleri oku":
+                ok, out = self.osa(
+                    'display dialog "Emin misin?\n\nBanka, kişisel, iş… gelen kutundaki TÜM maillerin içeriği '
+                    'yapay zekâya gönderilir." with title "Tüm mailler" with icon caution '
+                    'buttons {"Evet, hepsini oku", "Geri dön"} default button "Geri dön"',
+                    "return button returned of result")
+                if ok and out == "Evet, hepsini oku":
+                    pats = []
+                    break
+                warn = ""
+                continue
+            pats, bad = self.parse_senders(typed)
+            if bad:
+                warn = f"⚠️ Anlaşılmadı: {', '.join(bad)}  (örnek: @sabanciuniv.edu)\n\n"
+            elif not pats:
+                warn = "⚠️ Bir adres yazmadın. Okulunun uzantısını yaz, örneğin @sabanciuniv.edu\n\n"
+            else:
+                break
+        settings = read_json(SETTINGS_FILE, {})
+        settings["allowed_senders"] = pats
+        SETTINGS_FILE.write_text(json.dumps(settings, ensure_ascii=False, indent=1))
+        self.render(force=True)
+        self.refresh_mail()
 
     def add_file(self):
         """Mac'in dosya seçme penceresiyle PDF/Word seç (varsayılan: İndirilenler); sonuç bildirimle gelir."""
@@ -757,7 +827,11 @@ class PostIt:
         if data is None:
             log = DATA / "reminder.log"
             last = log.read_text().strip().splitlines()[-1] if log.exists() and log.stat().st_size else ""
-            if "girişi yok" in last or "API anahtarı" in last:
+            if "allowed_senders" not in read_json(SETTINGS_FILE, {}):
+                self.empty("Önce hangi maillerin okunacağını seç.\nSağ tık → Hangi mailler okunsun?")
+            elif "Codex girişi yok" in last:
+                self.empty("Codex girişi yapılmamış.\nTerminalde: codex login")
+            elif "girişi yok" in last or "API anahtarı" in last:
                 self.empty("Claude girişi yapılmamış.\nTerminalde: claude auth login")
             else:
                 self.empty("İlk tarama sürüyor…\nBirkaç dakika içinde burada görünecek.")
@@ -776,7 +850,9 @@ class PostIt:
                 continue
             (finished if item_key(d) in self.done else items).append((day, d))
 
-        if not items:
+        if not items and "allowed_senders" not in read_json(SETTINGS_FILE, {}):
+            self.empty("Önce hangi maillerin okunacağını seç.\nSağ tık → Hangi mailler okunsun?")
+        elif not items:
             self.empty("Hepsi tamam 🎉" if finished else "Önümüzdeki 30 günde deadline yok 🎉")
         for day, d in items:
             self.row(day, d, (day - today).days)
