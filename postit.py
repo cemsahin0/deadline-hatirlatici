@@ -340,6 +340,7 @@ class PostIt:
         self.menu.add_separator()
         self.menu.add_command(label="Bitti işaretlenenleri geri getir", command=self.restore_done)
         self.menu.add_separator()
+        self.menu.add_command(label="Post-it'i sağ üst köşeye geri al", command=self.reset_position)
         self.menu.add_command(label="Kapat (bir sonraki açılışta geri gelir)", command=self.on_close)
         # Sürükleyerek taşıma: kağıdın herhangi bir yerinden
         self.drag_from = None
@@ -359,17 +360,41 @@ class PostIt:
     def make_draggable(self, w):
         w.bind("<ButtonPress-1>", self.drag_start, add="+")
         w.bind("<B1-Motion>", self.drag_move, add="+")
-        w.bind("<ButtonRelease-1>", lambda e: self.save_window(), add="+")
+        w.bind("<ButtonRelease-1>", self.drag_end, add="+")
         w.bind("<Button-2>", self.show_menu, add="+")
         w.bind("<Button-3>", self.show_menu, add="+")
         w.bind("<Control-Button-1>", self.show_menu, add="+")
 
     def drag_start(self, e):
-        self.drag_from = (e.x_root - self.root.winfo_x(), e.y_root - self.root.winfo_y())
+        # Konumu kendimiz tutuyoruz: macOS'ta winfo_x/y bazen yanlış dönüyor ve pencere sıçrıyordu
+        self.drag_from = (e.x_root, e.y_root, self.x, self.y)
+        self.dragged = False
 
     def drag_move(self, e):
-        if self.drag_from:
-            self.root.geometry(f"+{e.x_root - self.drag_from[0]}+{e.y_root - self.drag_from[1]}")
+        if not self.drag_from:
+            return
+        x0, y0, wx, wy = self.drag_from
+        dx, dy = e.x_root - x0, e.y_root - y0
+        if not self.dragged and abs(dx) < 4 and abs(dy) < 4:
+            return   # dokunma/tıklama: pencere yerinden oynamasın
+        self.dragged = True
+        self.move_to(wx + dx, wy + dy)
+
+    def drag_end(self, e):
+        if self.drag_from and self.dragged:
+            self.save_window()
+        self.drag_from = None
+
+    def move_to(self, x, y):
+        """Pencereyi taşı; en az bir kısmı ekranda ve başlığı menü çubuğunun altında kalsın."""
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        self.x = int(min(max(x, 80 - self.w), sw - 80))
+        self.y = int(min(max(y, 40), sh - 80))
+        self.root.geometry(f"+{self.x}+{self.y}")
+
+    def reset_position(self):
+        self.move_to(self.root.winfo_screenwidth() - self.w - 30, 60)
+        self.save_window()
 
     def resize_start(self, e):
         self.resize_from = (e.x_root, e.y_root, self.w, self.h)
@@ -461,15 +486,14 @@ class PostIt:
         pos = read_json(WIN_FILE, {})
         self.w = max(MIN_W, int(pos.get("w", WIDTH)))
         self.h = max(MIN_H, int(pos.get("h", HEIGHT)))
+        self.root.geometry(f"{self.w}x{self.h}")
         if "x" in pos:
-            self.root.geometry(f"{self.w}x{self.h}+{pos['x']}+{pos['y']}")
+            self.move_to(int(pos["x"]), int(pos["y"]))
         else:
-            sw = self.root.winfo_screenwidth()
-            self.root.geometry(f"{self.w}x{self.h}+{sw - self.w - 30}+60")
+            self.move_to(self.root.winfo_screenwidth() - self.w - 30, 60)
 
     def save_window(self):
-        WIN_FILE.write_text(json.dumps({"x": self.root.winfo_x(), "y": self.root.winfo_y(),
-                                        "w": self.w, "h": self.h}))
+        WIN_FILE.write_text(json.dumps({"x": self.x, "y": self.y, "w": self.w, "h": self.h}))
 
     def on_close(self):
         self.save_window()
